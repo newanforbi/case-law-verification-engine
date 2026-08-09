@@ -63,7 +63,7 @@ export default function Home() {
             <Step
               n="01"
               title="Extract & identify"
-              body="From paste or a PDF text layer, pair case names to reporter/Westlaw pins (PR #493 pairing rules)."
+              body="From paste or a PDF text layer, pair case names to reporter/Westlaw pins."
             />
             <Step
               n="02"
@@ -84,9 +84,9 @@ export default function Home() {
               Sources that work
             </h2>
             <p className="mt-3 text-base leading-relaxed text-parchment-dim">
-              Reachability proven in the litigation-portfolio citation funnel
-              (PR #493). Justia, Scholar, CAP JSON API, and CourtListener
-              citation-lookup stay out of the path — blocked or auth-gated.
+              Citeproof probes only sources that answer without a login.
+              Justia, Scholar, CAP JSON API, and CourtListener citation-lookup
+              stay out of the path — blocked or auth-gated.
             </p>
           </div>
           <div className="mt-8 grid gap-6 md:grid-cols-2">
@@ -106,16 +106,7 @@ export default function Home() {
             </span>{" "}
             must resolve;{" "}
             <span className="text-parchment">In re Leman, 66 Cal.App.5th 200</span>{" "}
-            must not. Mechanics referenced from{" "}
-            <a
-              href="https://github.com/newanforbi/interactive-litigation-portfolio/pull/493"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brass underline-offset-2 hover:underline"
-            >
-              interactive-litigation-portfolio PR #493
-            </a>
-            .
+            must not.
           </p>
         </section>
 

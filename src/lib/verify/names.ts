@@ -68,7 +68,7 @@ function leftSeqOk(a: string, b: string): boolean {
 }
 
 /**
- * Caption compatibility used by PR #493 lookup-citations.py.
+ * Caption compatibility for reporter-pin matches.
  * Blocks substring traps like Home ⊂ "... at Home" and one-token
  * defendant absorption ("Morgan" ⊂ "Morgan Hill Unified").
  */

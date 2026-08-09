@@ -1,6 +1,5 @@
 /**
- * Citation extractor adapted from litigation-portfolio PR #493
- * (build-citation-index.py): reporter/Westlaw patterns + case-name pairing.
+ * Citation extractor: reporter/Westlaw patterns + case-name pairing.
  *
  * Focus: case-law authorities for verification. Statutes/rules are catalogued
  * but not sent to the CourtListener/CAP existence probe.

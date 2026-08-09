@@ -5,13 +5,11 @@ A web engine that verifies case-law citations against the two sources proven rea
 1. **CourtListener** — `GET /api/rest/v4/search/`
 2. **Caselaw Access Project** — `static.case.law/{reporter}/{volume}/CasesMetadata.json`
 
-Mechanics are drawn from [interactive-litigation-portfolio PR #493](https://github.com/newanforbi/interactive-litigation-portfolio/pull/493). This repo is a standalone product site, not a portfolio ledger.
-
 ## Why
 
 AI drafting invents pins. Citeproof checks whether a citation **exists** and whether the **caption matches** the reporter/Westlaw pin before it lands in a filing.
 
-**Paste cites** or **upload a pleading PDF**. The PDF path extracts the text layer, pairs case names to reporter/Westlaw pins (same pairing rules as PR #493), then runs the dual-source existence probe.
+**Paste cites** or **upload a pleading PDF**. The PDF path extracts the text layer, pairs case names to reporter/Westlaw pins, then runs the dual-source existence probe.
 
 Existence ≠ holding. Characterization still needs opinion text. Scanned image-only PDFs need OCR first (no text layer → clear error).
 
@@ -93,4 +91,4 @@ npx vercel --prod     # production
 
 ## Stack
 
-Next.js (App Router) + TypeScript + `pdf-parse`. Verification core in `src/lib/verify/`; citation pairing in `src/lib/citations/` (from PR #493 `build-citation-index.py` / `lookup-citations.py`). UI brand: **Citeproof**.
+Next.js (App Router) + TypeScript + `pdf-parse`. Verification core in `src/lib/verify/`; citation pairing in `src/lib/citations/`. UI brand: **Citeproof**.

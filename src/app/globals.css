@@ -110,16 +110,6 @@ body {
   }
 }
 
-@keyframes brand-glow-mark {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 0 transparent);
-  }
-  50% {
-    filter: drop-shadow(0 0 28px rgba(201, 166, 107, 0.22));
-  }
-}
-
 @keyframes pulse-line {
   0%,
   100% {
@@ -159,10 +149,6 @@ body {
 
 .brand-pulse {
   animation: brand-glow 5.5s ease-in-out infinite;
-}
-
-.brand-pulse-mark {
-  animation: brand-glow-mark 5.5s ease-in-out infinite;
 }
 
 .line-pulse {

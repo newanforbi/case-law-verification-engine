@@ -35,22 +35,7 @@ export default function Home() {
           </div>
 
           <div className="relative max-w-3xl">
-            {/* Matching the cap height of the Fraunces it replaces would have
-                left this smaller than the header lockup on phones, so it is
-                sized to lead the header instead: 1.2x at the narrow steps,
-                where the column is the constraint, opening to 1.6x at lg. */}
-            <div
-              role="img"
-              aria-label="Citeproof"
-              className="anim-rise brand-pulse-mark lockup [--lockup-word:3.5rem] sm:[--lockup-word:4.375rem] md:[--lockup-word:5.375rem] lg:[--lockup-word:6.5rem]"
-            >
-              <LockupArt
-                markSizes="(min-width: 1024px) 120px, (min-width: 768px) 99px, (min-width: 640px) 81px, 65px"
-                wordSizes="(min-width: 1024px) 414px, (min-width: 768px) 342px, (min-width: 640px) 279px, 223px"
-                priority
-              />
-            </div>
-            <div className="anim-rise-delay-1 line-pulse mt-5 h-px w-24 bg-brass/70" />
+            <div className="anim-rise line-pulse h-px w-24 bg-brass/70" />
             <h1 className="anim-rise-delay-1 mt-6 max-w-xl font-[family-name:var(--font-fraunces)] text-2xl leading-snug text-parchment sm:text-3xl md:text-[2.15rem]">
               Verify case law before the hallucination hits the filing.
             </h1>

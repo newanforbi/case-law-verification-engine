@@ -30,7 +30,7 @@ export default function Home() {
               width={256}
               height={256}
               sizes="(min-width: 768px) 71px, (min-width: 640px) 61px, 50px"
-              className="h-[3.125rem] w-[3.125rem] sm:h-[3.8125rem] sm:w-[3.8125rem] md:h-[4.4375rem] md:w-[4.4375rem]"
+              className="mt-[2.1px] h-[3.125rem] w-[3.125rem] sm:mt-[2.6px] sm:h-[3.8125rem] sm:w-[3.8125rem] md:mt-[3px] md:h-[4.4375rem] md:w-[4.4375rem]"
               priority
             />
             <Image

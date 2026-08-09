@@ -50,7 +50,11 @@ export function parseReporter(citation: string): ReporterPin | null {
 
 export function guessName(citation: string): string {
   let c = citation.trim();
-  c = c.replace(/^(?:See|Under|In|Holding\s+Key\s+Fact)\s+/i, "");
+  // Strip leading signal words, but keep "In re …" captions intact.
+  c = c.replace(/^(?:See|Under|Holding\s+Key\s+Fact)\s+/i, "");
+  if (!/^In\s+re\b/i.test(c)) {
+    c = c.replace(/^In\s+/i, "");
+  }
   const nameRe = /^(?:See\s+)?(.+?),\s+\d+\s+(?:U\.S\.|F\.|Cal\.)/i;
   const m = nameRe.exec(c);
   if (m) return m[1].trim();

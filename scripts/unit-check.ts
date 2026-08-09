@@ -17,6 +17,11 @@ assert.equal(
   guessName("Richardson v. McKnight, 521 U.S. 399 (1997)"),
   "Richardson v. McKnight",
 );
+assert.equal(guessName("In re Leman, 66 Cal.App.5th 200"), "In re Leman");
+assert.equal(
+  guessName("In re Hudson, 143 Cal.App.4th 1 (2006)"),
+  "In re Hudson",
+);
 assert.ok(namesCompatible("Richardson v. McKnight", "Richardson v. McKnight"));
 assert.ok(
   namesCompatible(

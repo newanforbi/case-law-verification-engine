@@ -68,7 +68,7 @@ export async function lookupOne(citation: string): Promise<LookupResult> {
     matchedCitations: [],
   };
 
-  // Run both working sources from PR #493 in parallel.
+  // Run both working sources in parallel.
   const [cl, cap] = await Promise.all([
     lookupCourtListener(citation, name),
     lookupCap(citation, name),
@@ -138,7 +138,7 @@ export async function verifyCitations(raw: string): Promise<VerifyResponse> {
         "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
       ],
       reference:
-        "Mechanics from interactive-litigation-portfolio PR #493 (CourtListener + CAP static.case.law)",
+        "Dual-source existence probe: CourtListener search + CAP static.case.law",
       controls: {
         positive: CONTROLS.positive,
         negative: CONTROLS.negative,

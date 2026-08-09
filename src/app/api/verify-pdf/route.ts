@@ -85,7 +85,7 @@ export async function POST(request: Request) {
           "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
         ],
         reference:
-          "PDF extract + citation pairing from interactive-litigation-portfolio PR #493; existence probe via CourtListener + CAP static.case.law",
+          "PDF extract + citation pairing, then dual-source existence probe via CourtListener + CAP static.case.law",
         extraction:
           "pdf-parse text layer → reporter/Westlaw + case-name pairing → dual-source verify",
       },

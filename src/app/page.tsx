@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import { LockupArt } from "@/components/Lockup";
 import { Verifier } from "@/components/Verifier";
 
 export default function Home() {
@@ -10,38 +10,14 @@ export default function Home() {
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-20 pt-6 md:px-8 md:pt-8">
         <header className="flex items-center justify-between gap-4 anim-rise">
-          {/* The mark is the word's C, so the wordmark art is the master with
-              its own C cropped off at the i's stem, and the mark is set as a
-              versal: its ink runs 1.34x the letters' cap height, rising above
-              the ascenders and hanging a notch below the baseline. Holding
-              that baseline is what the margins are for -- the mark's ink
-              bottom is 250/256 down its box, the letters' baseline 340/407
-              down theirs, so the word drops by the difference
-              (13.5/15.9/19.1px) and the mark's own small top margin is the
-              notch it hangs by. The gap is
-              the art's own 35/407 C-to-i letterfit, scaled with the versal and
-              less the mark's 21/256 right bearing. */}
           <Link
             href="/"
             aria-label="Citeproof"
-            className="flex items-start gap-[1px] no-underline sm:gap-[1.2px] md:gap-[1.4px]"
+            className="lockup [--lockup-word:2.9375rem] no-underline sm:[--lockup-word:3.5625rem] md:[--lockup-word:4.125rem]"
           >
-            <Image
-              src="/brand/citeproof-icon-256.png"
-              alt=""
-              width={256}
-              height={256}
-              sizes="(min-width: 768px) 76px, (min-width: 640px) 65px, 54px"
-              className="mt-[2.8px] h-[3.375rem] w-[3.375rem] sm:mt-[3.5px] sm:h-[4.0625rem] sm:w-[4.0625rem] md:mt-[4px] md:h-[4.75rem] md:w-[4.75rem]"
-              priority
-            />
-            <Image
-              src="/brand/citeproof-wordmark-iteproof.png"
-              alt=""
-              width={1617}
-              height={407}
-              sizes="(min-width: 768px) 262px, (min-width: 640px) 227px, 187px"
-              className="mt-[13.5px] h-[2.9375rem] w-auto sm:mt-[15.9px] sm:h-[3.5625rem] md:mt-[19.1px] md:h-[4.125rem]"
+            <LockupArt
+              markSizes="(min-width: 768px) 76px, (min-width: 640px) 65px, 54px"
+              wordSizes="(min-width: 768px) 262px, (min-width: 640px) 227px, 187px"
               priority
             />
           </Link>
@@ -59,9 +35,21 @@ export default function Home() {
           </div>
 
           <div className="relative max-w-3xl">
-            <p className="anim-rise font-[family-name:var(--font-fraunces)] brand-pulse text-5xl leading-[0.95] tracking-tight text-parchment sm:text-6xl md:text-7xl lg:text-8xl">
-              Citeproof
-            </p>
+            {/* Matching the cap height of the Fraunces it replaces would have
+                left this smaller than the header lockup on phones, so it is
+                sized to lead the header instead: 1.2x at the narrow steps,
+                where the column is the constraint, opening to 1.6x at lg. */}
+            <div
+              role="img"
+              aria-label="Citeproof"
+              className="anim-rise brand-pulse-mark lockup [--lockup-word:3.5rem] sm:[--lockup-word:4.375rem] md:[--lockup-word:5.375rem] lg:[--lockup-word:6.5rem]"
+            >
+              <LockupArt
+                markSizes="(min-width: 1024px) 120px, (min-width: 768px) 99px, (min-width: 640px) 81px, 65px"
+                wordSizes="(min-width: 1024px) 414px, (min-width: 768px) 342px, (min-width: 640px) 279px, 223px"
+                priority
+              />
+            </div>
             <div className="anim-rise-delay-1 line-pulse mt-5 h-px w-24 bg-brass/70" />
             <h1 className="anim-rise-delay-1 mt-6 max-w-xl font-[family-name:var(--font-fraunces)] text-2xl leading-snug text-parchment sm:text-3xl md:text-[2.15rem]">
               Verify case law before the hallucination hits the filing.

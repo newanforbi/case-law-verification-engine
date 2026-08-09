@@ -1,5 +1,7 @@
 /** Client-safe constants (no Node fetch / CAP / CourtListener I/O). */
 
+export { CONSENSUS_KINDS } from "./types";
+
 export const CONTROLS = {
   positive: "Richardson v. McKnight, 521 U.S. 399 (1997)",
   negative: "In re Leman, 66 Cal.App.5th 200",

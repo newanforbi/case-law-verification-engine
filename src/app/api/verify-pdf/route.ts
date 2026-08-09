@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { extractCitationsFromPages } from "@/lib/citations/extract";
 import { extractPdfText } from "@/lib/pdf/extract";
-import { lookupOne, type LookupResult, type Consensus } from "@/lib/verify";
+import { lookupOne, tallyConsensus, type LookupResult } from "@/lib/verify";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,14 +63,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const counts: Record<Consensus, number> = {
-      FOUND: 0,
-      PARTIAL: 0,
-      CAPTION_MISMATCH: 0,
-      NOT_FOUND: 0,
-      UNKNOWN: 0,
-    };
-    for (const r of results) counts[r.consensus] += 1;
+    const counts = tallyConsensus(results);
 
     // Compact occurrence list for the UI (authorities + reporters first).
     const interesting = cites.citations.filter((c) =>

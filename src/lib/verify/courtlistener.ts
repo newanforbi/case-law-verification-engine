@@ -38,6 +38,7 @@ export async function lookupCourtListener(
 
   let best: SourceHit | null = null;
   let lastStatus: number | null = null;
+  let anySearchSucceeded = false;
   const tried: string[] = [];
 
   for (const q of queries) {
@@ -57,6 +58,7 @@ export async function lookupCourtListener(
       await sleep(250);
       continue;
     }
+    anySearchSucceeded = true;
 
     const results = data.results || [];
     for (const r of results) {
@@ -98,10 +100,12 @@ export async function lookupCourtListener(
       if (accept) {
         const hit: SourceHit = {
           source: "courtlistener",
+          outcome: "FOUND",
           found: true,
           url: fullUrl,
           caseName: name,
           citations: cites,
+          coverage: "CourtListener returned an opinion matching this pin.",
           notes: `Search q=${JSON.stringify(q)}; cite_match=${citeMatch}; wl_match=${wlMatch}; name_match=${nameMatch}`,
           httpStatus: 200,
         };
@@ -120,11 +124,53 @@ export async function lookupCourtListener(
   }
 
   if (best) return best;
+
+  if (!tried.length) {
+    return {
+      source: "courtlistener",
+      outcome: "OUT_OF_SCOPE",
+      found: false,
+      coverage:
+        "Nothing queryable in this citation — no reporter pin, Westlaw pin, or caption to search on.",
+    };
+  }
+
+  if (!anySearchSucceeded) {
+    return {
+      source: "courtlistener",
+      outcome: "UNAVAILABLE",
+      found: false,
+      url: CL_SEARCH,
+      httpStatus: lastStatus,
+      coverage: `No CourtListener search completed (last status ${lastStatus}); this citation was not actually checked against it.`,
+      notes: `Queries attempted: ${JSON.stringify(tried)}`,
+    };
+  }
+
+  // A search that ran and came back empty only means something where
+  // CourtListener carries the corpus. It carries the reporters this app
+  // parses; it indexes Westlaw pins only for opinions it already holds, so a
+  // Westlaw-only citation missing here is uninformative.
+  if (rep) {
+    return {
+      source: "courtlistener",
+      outcome: "ABSENT",
+      found: false,
+      url: CL_SEARCH,
+      httpStatus: 200,
+      coverage: `CourtListener carries ${rep.label}, and a search for this pin returned no matching opinion.`,
+      notes: `No cite/name match in queries ${JSON.stringify(tried)}`,
+    };
+  }
+
   return {
     source: "courtlistener",
+    outcome: "OUT_OF_SCOPE",
     found: false,
     url: CL_SEARCH,
-    httpStatus: lastStatus,
+    httpStatus: 200,
+    coverage:
+      "CourtListener indexes Westlaw numbers only for opinions already in its corpus, so an unpublished Westlaw-only citation missing here is not evidence of anything.",
     notes: `No cite/name match in queries ${JSON.stringify(tried)}`,
   };
 }

@@ -1,5 +1,7 @@
 /** Client-safe constants (no Node fetch / CAP / CourtListener I/O). */
 
+export { CONSENSUS_KINDS } from "./types";
+
 /**
  * Upload ceiling, enforced on both sides.
  *

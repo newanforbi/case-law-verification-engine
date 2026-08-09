@@ -1,8 +1,14 @@
 "use client";
 
 import { startTransition, useRef, useState } from "react";
-import type { Consensus, LookupResult, VerifyResponse } from "@/lib/verify";
+import type {
+  Consensus,
+  LookupResult,
+  SourceOutcome,
+  VerifyResponse,
+} from "@/lib/verify";
 import {
+  CONSENSUS_KINDS,
   CONTROLS,
   EXAMPLES,
   MAX_PDF_BYTES,
@@ -39,18 +45,43 @@ interface PdfVerifyResponse extends VerifyResponse {
 
 const STATUS_LABEL: Record<Consensus, string> = {
   FOUND: "Found",
-  PARTIAL: "Partial",
+  PARTIAL: "Sources disagree",
   CAPTION_MISMATCH: "Caption mismatch",
   NOT_FOUND: "Not found",
-  UNKNOWN: "Unknown",
+  OUT_OF_COVERAGE: "Not covered",
+  UNCHECKED: "Not checked",
+  UNKNOWN: "Unparsed",
 };
 
 const STATUS_HINT: Record<Consensus, string> = {
-  FOUND: "Both CourtListener and CAP resolve this pin with a compatible caption.",
-  PARTIAL: "One working source resolves the pin. Common for Westlaw-only citations.",
-  CAPTION_MISMATCH: "The pin resolves, but to a different case caption — classic miscitation.",
-  NOT_FOUND: "Neither working source found this reporter or Westlaw pin.",
-  UNKNOWN: "Could not classify — missing reporter/Westlaw pin or incomplete probe.",
+  FOUND:
+    "A source that carries this reporter resolved the pin, with a compatible caption.",
+  PARTIAL:
+    "One source resolved the pin and another that carries the same reporter did not. Worth opening both.",
+  CAPTION_MISMATCH:
+    "The pin resolves, but to a different case caption — classic miscitation.",
+  NOT_FOUND:
+    "A source that carries this reporter was able to look and does not have it. This is the fabrication signal.",
+  OUT_OF_COVERAGE:
+    "Neither free source covers this citation — typically unpublished or Westlaw-only. Absence here is not evidence; check a paid database.",
+  UNCHECKED:
+    "A source was unreachable, so this citation was never actually checked. Re-run before relying on it.",
+  UNKNOWN: "No reporter or Westlaw pin could be parsed from this line.",
+};
+
+/** A source reports what it was in a position to say, not merely hit or miss. */
+const OUTCOME_LABEL: Record<SourceOutcome, string> = {
+  FOUND: "Hit",
+  ABSENT: "Searched, absent",
+  OUT_OF_SCOPE: "Out of corpus",
+  UNAVAILABLE: "Unreachable",
+};
+
+const OUTCOME_TONE: Record<SourceOutcome, string> = {
+  FOUND: "text-verified",
+  ABSENT: "text-not-found",
+  OUT_OF_SCOPE: "text-unknown",
+  UNAVAILABLE: "text-mismatch",
 };
 
 /**
@@ -334,8 +365,12 @@ export function Verifier() {
                 Results
               </h2>
               <p className="mt-1 text-sm text-parchment-dim">
-                {data.resultCount} probed · {data.counts.FOUND} found · {data.counts.NOT_FOUND}{" "}
-                not found · {data.counts.CAPTION_MISMATCH} caption mismatch
+                {[
+                  `${data.resultCount} probed`,
+                  ...CONSENSUS_KINDS.filter((k) => data.counts[k] > 0).map(
+                    (k) => `${data.counts[k]} ${STATUS_LABEL[k].toLowerCase()}`,
+                  ),
+                ].join(" · ")}
               </p>
             </div>
           </div>
@@ -469,11 +504,14 @@ function ResultRow({ result }: { result: LookupResult }) {
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
                 {s.source === "courtlistener" ? "CourtListener" : "CAP static.case.law"}
               </p>
-              <span className={`text-xs font-medium ${s.found ? "text-verified" : "text-not-found"}`}>
-                {s.found ? "Hit" : "Miss"}
+              <span className={`text-xs font-medium ${OUTCOME_TONE[s.outcome]}`}>
+                {OUTCOME_LABEL[s.outcome]}
               </span>
             </div>
             {s.caseName ? <p className="mt-2 text-sm text-parchment">{s.caseName}</p> : null}
+            {s.coverage ? (
+              <p className="mt-2 text-xs leading-relaxed text-parchment">{s.coverage}</p>
+            ) : null}
             {s.notes ? (
               <p className="mt-1 text-xs leading-relaxed text-parchment-dim">{s.notes}</p>
             ) : null}

@@ -15,7 +15,7 @@ export default function Home() {
             className="inline-flex items-end no-underline"
             aria-label="Citeproof"
           >
-            {/* Logo C = capital C; iteproof on the same baseline, ~same type size */}
+            {/* Logo C + iteproof as one written line: same display height, shared baseline */}
             <Image
               src="/brand/citeproof-icon-256.png"
               alt=""
@@ -27,9 +27,9 @@ export default function Home() {
             <Image
               src="/brand/citeproof-wordmark-iteproof-header-lg.png"
               alt=""
-              width={254}
-              height={64}
-              className="-ml-2 h-10 w-auto md:-ml-2.5 md:h-12"
+              width={317}
+              height={80}
+              className="-ml-1.5 h-12 w-auto translate-y-1 md:-ml-2 md:h-14 md:translate-y-[5px]"
               priority
             />
           </Link>

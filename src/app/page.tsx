@@ -12,16 +12,16 @@ export default function Home() {
         <header className="flex items-center justify-between gap-4 anim-rise">
           <Link
             href="/"
-            className="flex items-end no-underline"
+            className="inline-flex items-end no-underline"
             aria-label="Citeproof"
           >
-            {/* Logo C = capital C; iteproof shares the baseline like one word */}
+            {/* Logo C = capital C; iteproof on the same baseline, ~same type size */}
             <Image
               src="/brand/citeproof-icon-256.png"
               alt=""
-              width={80}
-              height={80}
-              className="h-14 w-14 shrink-0 md:h-16 md:w-16"
+              width={64}
+              height={64}
+              className="h-12 w-12 shrink-0 md:h-14 md:w-14"
               priority
             />
             <Image
@@ -29,7 +29,7 @@ export default function Home() {
               alt=""
               width={254}
               height={64}
-              className="-ml-2.5 h-11 w-auto md:-ml-3 md:h-[3.25rem]"
+              className="-ml-2 h-10 w-auto md:-ml-2.5 md:h-12"
               priority
             />
           </Link>

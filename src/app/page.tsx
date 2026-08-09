@@ -10,21 +10,26 @@ export default function Home() {
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-20 pt-6 md:px-8 md:pt-8">
         <header className="flex items-center justify-between gap-4 anim-rise">
-          <Link href="/" className="flex items-center gap-3.5 no-underline">
+          <Link
+            href="/"
+            className="flex items-center no-underline"
+            aria-label="Citeproof"
+          >
+            {/* Logo C stands in for the letter C — nestled against iteproof */}
             <Image
               src="/brand/citeproof-icon-256.png"
               alt=""
               width={72}
               height={72}
-              className="h-16 w-16 md:h-[4.5rem] md:w-[4.5rem]"
+              className="h-14 w-14 shrink-0 md:h-16 md:w-16"
               priority
             />
             <Image
-              src="/brand/citeproof-wordmark-header.png"
-              alt="Citeproof"
-              width={170}
+              src="/brand/citeproof-wordmark-iteproof-header.png"
+              alt=""
+              width={141}
               height={36}
-              className="h-7 w-auto md:h-8"
+              className="-ml-1.5 h-7 w-auto md:-ml-2 md:h-8"
               priority
             />
           </Link>

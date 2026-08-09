@@ -193,3 +193,39 @@ body {
   border-color: rgba(138, 133, 120, 0.45);
   background: rgba(138, 133, 120, 0.1);
 }
+
+/* Header lockup: logo C + iteproof on one written baseline */
+.brand-lockup {
+  display: inline-flex;
+  align-items: flex-end;
+  text-decoration: none;
+}
+
+.brand-lockup-icon {
+  flex-shrink: 0;
+  width: 2.75rem !important;
+  height: 2.75rem !important;
+  max-width: none;
+}
+
+.brand-lockup-wordmark {
+  width: auto !important;
+  height: 4.5rem !important;
+  max-width: none;
+  margin-left: -0.3rem;
+  /* Drop so letter baselines meet the bottom of the C */
+  transform: translateY(0.85rem);
+}
+
+@media (min-width: 48rem) {
+  .brand-lockup-icon {
+    width: 3rem !important;
+    height: 3rem !important;
+  }
+
+  .brand-lockup-wordmark {
+    height: 5rem !important;
+    margin-left: -0.4rem;
+    transform: translateY(1rem);
+  }
+}

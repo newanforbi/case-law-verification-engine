@@ -10,18 +10,14 @@ export default function Home() {
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-20 pt-6 md:px-8 md:pt-8">
         <header className="flex items-center justify-between gap-4 anim-rise">
-          <Link
-            href="/"
-            className="inline-flex items-end no-underline"
-            aria-label="Citeproof"
-          >
-            {/* Logo C + iteproof as one written line: same display height, shared baseline */}
+          <Link href="/" className="brand-lockup" aria-label="Citeproof">
+            {/* Logo C + iteproof as one written line */}
             <Image
               src="/brand/citeproof-icon-256.png"
               alt=""
               width={64}
               height={64}
-              className="h-12 w-12 shrink-0 md:h-14 md:w-14"
+              className="brand-lockup-icon"
               priority
             />
             <Image
@@ -29,7 +25,7 @@ export default function Home() {
               alt=""
               width={317}
               height={80}
-              className="-ml-1 h-[3.5rem] w-auto translate-y-1.5 md:-ml-1.5 md:h-16 md:translate-y-[7px]"
+              className="brand-lockup-wordmark"
               priority
             />
           </Link>

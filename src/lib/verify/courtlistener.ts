@@ -1,0 +1,130 @@
+import { httpGet } from "./http";
+import { namesCompatible, normalizeName } from "./names";
+import { parseReporter, WL_RE } from "./reporters";
+import type { SourceHit } from "./types";
+
+const CL_SEARCH = "https://www.courtlistener.com/api/rest/v4/search/";
+
+type ClResult = {
+  citation?: Array<string | number>;
+  caseName?: string;
+  absolute_url?: string;
+};
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+export async function lookupCourtListener(
+  citation: string,
+  nameGuess: string,
+): Promise<SourceHit> {
+  const rep = parseReporter(citation);
+  const wl = citation.match(WL_RE);
+  const queries: string[] = [];
+
+  if (rep) {
+    queries.push(`"${rep.pin}"`);
+    const compact = rep.pin.replace(/Cal\. App\./g, "Cal.App.").replace(/F\. /g, "F.");
+    if (compact !== rep.pin) queries.push(`"${compact}"`);
+  }
+  if (wl) {
+    queries.push(wl[1]);
+    queries.push(`WL ${wl[1]}`);
+  }
+  if (nameGuess && rep && !wl) {
+    queries.push(`"${nameGuess}"`);
+  }
+
+  let best: SourceHit | null = null;
+  let lastStatus: number | null = null;
+  const tried: string[] = [];
+
+  for (const q of queries) {
+    const url = `${CL_SEARCH}?${new URLSearchParams({ type: "o", q })}`;
+    const { status, body } = await httpGet(url);
+    lastStatus = status;
+    tried.push(q);
+    if (status !== 200) {
+      await sleep(250);
+      continue;
+    }
+
+    let data: { results?: ClResult[] };
+    try {
+      data = JSON.parse(body.toString("utf8")) as { results?: ClResult[] };
+    } catch {
+      await sleep(250);
+      continue;
+    }
+
+    const results = data.results || [];
+    for (const r of results) {
+      const cites = (r.citation || []).map(String);
+      const name = r.caseName || "";
+      const abs = r.absolute_url || "";
+      const fullUrl = abs.startsWith("/")
+        ? `https://www.courtlistener.com${abs}`
+        : abs;
+
+      let citeMatch = false;
+      if (rep) {
+        const target = normalizeName(rep.pin);
+        citeMatch = cites.some((c) => {
+          const nc = normalizeName(c);
+          return nc === target || nc.includes(target);
+        });
+      }
+
+      let wlMatch = false;
+      if (wl) {
+        const pin = wl[1];
+        const yearM = citation.match(/\b((?:19|20)\d{2})\b/);
+        if (yearM) {
+          const full = `${yearM[1]} WL ${pin}`;
+          wlMatch = cites.some((c) => c.toLowerCase().includes(full.toLowerCase()));
+        } else {
+          const wlRx = new RegExp(`(?:^|[^0-9])(?:WL\\s*)?${pin}(?:[^0-9]|$)`, "i");
+          wlMatch = cites.some((c) => wlRx.test(c) && c.toUpperCase().includes("WL"));
+        }
+      }
+
+      const nameMatch = namesCompatible(nameGuess, name);
+      let accept = false;
+      if (rep && citeMatch) accept = true;
+      else if (wl && !rep && wlMatch) accept = true;
+      else if (!rep && !wl && nameMatch) accept = true;
+
+      if (accept) {
+        const hit: SourceHit = {
+          source: "courtlistener",
+          found: true,
+          url: fullUrl,
+          caseName: name,
+          citations: cites,
+          notes: `Search q=${JSON.stringify(q)}; cite_match=${citeMatch}; wl_match=${wlMatch}; name_match=${nameMatch}`,
+          httpStatus: 200,
+        };
+        if ((citeMatch || wlMatch) && nameMatch) return hit;
+        if (
+          !best ||
+          ((citeMatch || wlMatch) &&
+            (best.notes || "").includes("cite_match=False") &&
+            (best.notes || "").includes("wl_match=False"))
+        ) {
+          best = hit;
+        }
+      }
+    }
+    await sleep(550);
+  }
+
+  if (best) return best;
+  return {
+    source: "courtlistener",
+    found: false,
+    url: CL_SEARCH,
+    httpStatus: lastStatus,
+    notes: `No cite/name match in queries ${JSON.stringify(tried)}`,
+  };
+}

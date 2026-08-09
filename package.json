@@ -16,6 +16,7 @@
     "test:pdf": "npm run fixture:pdf && tsx scripts/pdf-verify-check.ts"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "next": "15.5.23",
     "pdf-parse": "^2.4.5",
     "react": "19.1.0",

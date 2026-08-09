@@ -2,7 +2,13 @@
 
 import { startTransition, useRef, useState } from "react";
 import type { Consensus, LookupResult, VerifyResponse } from "@/lib/verify";
-import { CONTROLS, EXAMPLES } from "@/lib/verify/client-constants";
+import {
+  CONTROLS,
+  EXAMPLES,
+  MAX_PDF_BYTES,
+  MAX_PDF_LABEL,
+  describeBytes,
+} from "@/lib/verify/client-constants";
 
 type Mode = "paste" | "pdf";
 
@@ -47,6 +53,35 @@ const STATUS_HINT: Record<Consensus, string> = {
   UNKNOWN: "Could not classify — missing reporter/Westlaw pin or incomplete probe.",
 };
 
+/**
+ * Read a response that might not be ours.
+ *
+ * A request can fail before it reaches the route — a body over the platform's
+ * limit, a function that ran long, a gateway hiccup — and what comes back then
+ * is an HTML error page. Calling res.json() on that throws a parse error about
+ * a "<" character, which tells the user nothing about what went wrong. So the
+ * body is read as text first, and when it will not parse, the status is the
+ * only honest thing left to explain.
+ */
+async function readJson<T>(res: Response, fallback: string): Promise<T> {
+  const body = await res.text();
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    throw new Error(explainNonJson(res.status, fallback));
+  }
+}
+
+function explainNonJson(status: number, fallback: string): string {
+  if (status === 413)
+    return `That PDF is over the ${MAX_PDF_LABEL} upload limit, so the server rejected it before it could be read.`;
+  if (status === 504 || status === 408)
+    return "The server took too long and gave up. Try a shorter document, or one with fewer authorities.";
+  if (status === 502 || status === 503)
+    return "The server was unavailable. Nothing was checked — try again in a moment.";
+  return `${fallback} (HTTP ${status}). The server returned a page instead of a result.`;
+}
+
 export function Verifier() {
   const [mode, setMode] = useState<Mode>("paste");
   const [text, setText] = useState(`${CONTROLS.positive}\n${CONTROLS.negative}`);
@@ -71,7 +106,7 @@ export function Verifier() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ citations }),
       });
-      const json = (await res.json()) as PdfVerifyResponse;
+      const json = await readJson<PdfVerifyResponse>(res, "Verification failed");
       if (!res.ok) throw new Error(json.error || "Verification failed");
       startTransition(() => setData(json));
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -96,7 +131,7 @@ export function Verifier() {
       body.append("file", pdf);
       body.append("verify", "true");
       const res = await fetch("/api/verify-pdf", { method: "POST", body });
-      const json = (await res.json()) as PdfVerifyResponse;
+      const json = await readJson<PdfVerifyResponse>(res, "PDF verification failed");
       if (!res.ok) throw new Error(json.error || "PDF verification failed");
       startTransition(() => setData(json));
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -112,6 +147,15 @@ export function Verifier() {
     if (!next) return;
     if (!next.name.toLowerCase().endsWith(".pdf") && next.type !== "application/pdf") {
       setError("Only PDF files are accepted.");
+      return;
+    }
+    // Refuse it here rather than letting the platform reject the request with
+    // an error page the client cannot read.
+    if (next.size > MAX_PDF_BYTES) {
+      setError(
+        `That PDF is ${describeBytes(next.size)}, over the ${MAX_PDF_LABEL} upload limit. Split it, or export a text-only copy.`,
+      );
+      setFile(null);
       return;
     }
     setError(null);
@@ -189,7 +233,7 @@ export function Verifier() {
                 <p className="text-sm text-parchment">
                   {file.name}{" "}
                   <span className="text-parchment-dim">
-                    ({Math.max(1, Math.round(file.size / 1024))} KB)
+                    ({describeBytes(file.size)})
                   </span>
                 </p>
               ) : (

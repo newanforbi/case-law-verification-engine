@@ -33,8 +33,9 @@ export default function Home() {
               Verify case law before the hallucination hits the filing.
             </h1>
             <p className="anim-rise-delay-2 mt-4 max-w-lg text-base leading-relaxed text-parchment-dim md:text-lg">
-              Paste a citation. We probe CourtListener and the Caselaw Access
-              Project — the two sources that actually answer without a login.
+              Paste cites or upload a pleading PDF. We find the authorities,
+              then probe CourtListener and CAP — the two sources that answer
+              without a login.
             </p>
           </div>
 
@@ -61,8 +62,8 @@ export default function Home() {
           <ol className="mt-10 grid gap-8 md:grid-cols-3 md:gap-10">
             <Step
               n="01"
-              title="Parse the pin"
-              body="Extract reporter volume/page or Westlaw number and a caption guess from the pasted cite."
+              title="Extract & identify"
+              body="From paste or a PDF text layer, pair case names to reporter/Westlaw pins (PR #493 pairing rules)."
             />
             <Step
               n="02"

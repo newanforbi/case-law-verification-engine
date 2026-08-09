@@ -11,7 +11,9 @@ Mechanics are drawn from [interactive-litigation-portfolio PR #493](https://gith
 
 AI drafting invents pins. Citeproof checks whether a citation **exists** and whether the **caption matches** the reporter/Westlaw pin before it lands in a filing.
 
-Existence ≠ holding. Characterization still needs opinion text.
+**Paste cites** or **upload a pleading PDF**. The PDF path extracts the text layer, pairs case names to reporter/Westlaw pins (same pairing rules as PR #493), then runs the dual-source existence probe.
+
+Existence ≠ holding. Characterization still needs opinion text. Scanned image-only PDFs need OCR first (no text layer → clear error).
 
 ## Consensus statuses
 
@@ -46,22 +48,27 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Paste citations and click **Verify**.
-
-API:
+Open [http://localhost:3000](http://localhost:3000). Use **Paste cites** or **Upload PDF**.
 
 ```bash
+# paste API
 curl -s -X POST http://localhost:3000/api/verify \
   -H 'content-type: application/json' \
   -d '{"citations":"Richardson v. McKnight, 521 U.S. 399 (1997)\nIn re Leman, 66 Cal.App.5th 200"}'
+
+# PDF API
+npm run fixture:pdf
+curl -s -X POST http://localhost:3000/api/verify-pdf \
+  -F file=@fixtures/sample-pleading.pdf
 ```
 
 ```bash
-npm run test:unit          # parser + caption matching
-npm run test:controls      # live Richardson(+) / Leman(−) against the API
+npm run test:unit          # parser + caption matching + citation extract
+npm run test:controls      # live Richardson(+) / Leman(−)
+npm run test:pdf           # sample pleading PDF → extract → verify controls
 npm run build
 ```
 
 ## Stack
 
-Next.js (App Router) + TypeScript. Verification core lives in `src/lib/verify/` (ported from PR #493 `lookup-citations.py`). UI brand: **Citeproof**.
+Next.js (App Router) + TypeScript + `pdf-parse`. Verification core in `src/lib/verify/`; citation pairing in `src/lib/citations/` (from PR #493 `build-citation-index.py` / `lookup-citations.py`). UI brand: **Citeproof**.

@@ -7,11 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:unit": "tsx scripts/unit-check.ts",
-    "test:controls": "tsx scripts/controls-check.ts"
+    "fixture:pdf": "node scripts/make-sample-pleading.mjs",
+    "test:unit": "tsx scripts/unit-check.ts && tsx scripts/citation-extract-check.ts",
+    "test:controls": "tsx scripts/controls-check.ts",
+    "test:pdf": "npm run fixture:pdf && tsx scripts/pdf-verify-check.ts"
   },
   "dependencies": {
     "next": "15.5.23",
+    "pdf-parse": "^2.4.5",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
@@ -19,6 +22,7 @@
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

@@ -12,24 +12,24 @@ export default function Home() {
         <header className="flex items-center justify-between gap-4 anim-rise">
           <Link
             href="/"
-            className="flex items-center no-underline"
+            className="flex items-end no-underline"
             aria-label="Citeproof"
           >
-            {/* Logo C stands in for the letter C — nestled against iteproof */}
+            {/* Logo C stands in for the letter C — same baseline as iteproof */}
             <Image
               src="/brand/citeproof-icon-256.png"
               alt=""
-              width={72}
-              height={72}
-              className="h-14 w-14 shrink-0 md:h-16 md:w-16"
+              width={80}
+              height={80}
+              className="h-[3.25rem] w-[3.25rem] shrink-0 md:h-[3.75rem] md:w-[3.75rem]"
               priority
             />
             <Image
-              src="/brand/citeproof-wordmark-iteproof-header.png"
+              src="/brand/citeproof-wordmark-iteproof-header-lg.png"
               alt=""
-              width={141}
-              height={36}
-              className="-ml-1.5 h-7 w-auto md:-ml-2 md:h-8"
+              width={188}
+              height={48}
+              className="-ml-2 mb-1 h-9 w-auto md:-ml-2.5 md:mb-1.5 md:h-11"
               priority
             />
           </Link>

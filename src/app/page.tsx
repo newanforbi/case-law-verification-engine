@@ -1,3 +1,5 @@
+import Image from "next/image";
+import Link from "next/link";
 import { Verifier } from "@/components/Verifier";
 
 export default function Home() {
@@ -8,9 +10,24 @@ export default function Home() {
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-20 pt-6 md:px-8 md:pt-8">
         <header className="flex items-center justify-between gap-4 anim-rise">
-          <p className="font-[family-name:var(--font-fraunces)] text-lg tracking-tight text-brass md:text-xl">
-            Citeproof
-          </p>
+          <Link href="/" className="flex items-center gap-2.5 no-underline">
+            <Image
+              src="/brand/citeproof-icon-256.png"
+              alt=""
+              width={28}
+              height={28}
+              className="rounded-[6px]"
+              priority
+            />
+            <Image
+              src="/brand/citeproof-wordmark-header.png"
+              alt="Citeproof"
+              width={140}
+              height={28}
+              className="h-6 w-auto md:h-7"
+              priority
+            />
+          </Link>
           <a
             href="#method"
             className="text-xs uppercase tracking-[0.14em] text-parchment-dim transition hover:text-brass md:text-sm"

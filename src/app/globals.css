@@ -196,6 +196,97 @@ body {
   box-shadow: 0 0 0 3px rgba(201, 166, 107, 0.12);
 }
 
+/* The report, on paper.
+   Everything that exists to gather input is noise once the run is over, so
+   print keeps only the record: the header block, the authorities, and their
+   evidence. Dark chrome is dropped for ink on white — a filed exhibit should
+   not arrive as a screenshot of a website. */
+.print-only {
+  display: none;
+}
+
+@media print {
+  /* Marked explicitly at each call site rather than inferred by selector:
+     #results sits inside the hero section, so anything that hides "the rest
+     of the page" structurally takes the report down with it. */
+  .no-print,
+  header,
+  .grain,
+  .spine-plane {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block;
+    margin-bottom: 1.5rem;
+    border-bottom: 1pt solid #000;
+    padding-bottom: 0.75rem;
+  }
+
+  .print-only h1 {
+    margin: 0 0 0.35rem;
+    font-size: 15pt;
+  }
+
+  .print-only p,
+  .print-only li {
+    margin: 0.15rem 0;
+    font-size: 8.5pt;
+  }
+
+  .print-only ul {
+    margin: 0.5rem 0 0;
+    padding-left: 1rem;
+  }
+
+  html,
+  body,
+  .atmosphere {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* The screen layout centres a full-height column, which on paper becomes a
+     third of a blank first page before the report begins. */
+  main,
+  main > div,
+  main section {
+    min-height: 0 !important;
+    justify-content: flex-start !important;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+  }
+
+  #results {
+    margin-top: 0 !important;
+  }
+
+  #results,
+  #results * {
+    color: #000 !important;
+    background: transparent !important;
+    border-color: #999 !important;
+  }
+
+  /* An authority and its evidence belong on one page: a verdict stranded
+     from the coverage line that justifies it is worse than a short page. */
+  #results li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 0.6rem;
+  }
+
+  a[href]::after {
+    content: " <" attr(href) ">";
+    font-size: 7.5pt;
+    word-break: break-all;
+  }
+
+  @page {
+    margin: 16mm;
+  }
+}
+
 .status-FOUND {
   color: var(--verified);
   border-color: rgba(95, 175, 122, 0.45);

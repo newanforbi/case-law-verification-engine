@@ -4,13 +4,17 @@ import { startTransition, useRef, useState } from "react";
 import type {
   Consensus,
   LookupResult,
+  QuoteMatch,
   SourceOutcome,
+  Support,
   VerifyResponse,
 } from "@/lib/verify";
+import { buildReport, reportFileName } from "@/lib/report/report";
 import {
   CONSENSUS_KINDS,
   CONTROLS,
   EXAMPLES,
+  tallyConsensus,
   MAX_PDF_BYTES,
   MAX_PDF_LABEL,
   describeBytes,
@@ -41,7 +45,20 @@ interface PdfVerifyResponse extends VerifyResponse {
   };
   verified?: boolean;
   error?: string;
+  diagnostics?: { elapsedMs: number; queued: number; verifiedInRequest: number };
 }
+
+/**
+ * How many authorities go up in one verification request.
+ *
+ * Each one makes several upstream calls with deliberate pauses between them,
+ * so a brief with forty authorities is minutes of work — far past what a
+ * serverless function will sit through, and the platform kills it with an
+ * error page rather than anything this app can catch. Extraction is fast, so
+ * the document is parsed in one request and the verifying is done in batches
+ * small enough that no single request can outlive its limit.
+ */
+const VERIFY_BATCH = 5;
 
 const STATUS_LABEL: Record<Consensus, string> = {
   FOUND: "Found",
@@ -67,6 +84,38 @@ const STATUS_HINT: Record<Consensus, string> = {
   UNCHECKED:
     "A source was unreachable, so this citation was never actually checked. Re-run before relying on it.",
   UNKNOWN: "No reporter or Westlaw pin could be parsed from this line.",
+};
+
+const SUPPORT_LABEL: Record<Support, string> = {
+  SUPPORTED: "Quote checks out",
+  QUALIFIED: "Quote altered",
+  UNSUPPORTED: "Quote not in opinion",
+  INDETERMINATE: "Quote too short to judge",
+  NO_QUOTE: "",
+  UNCHECKED: "Quote not checked",
+};
+
+const SUPPORT_TONE: Record<Support, string> = {
+  SUPPORTED: "status-FOUND",
+  QUALIFIED: "status-CAPTION_MISMATCH",
+  UNSUPPORTED: "status-NOT_FOUND",
+  INDETERMINATE: "status-UNKNOWN",
+  NO_QUOTE: "status-UNKNOWN",
+  UNCHECKED: "status-UNCHECKED",
+};
+
+const QUOTE_LABEL: Record<QuoteMatch, string> = {
+  VERBATIM: "Verbatim",
+  ALTERED: "Altered",
+  ABSENT: "Not in opinion",
+  INDETERMINATE: "Inconclusive",
+};
+
+const QUOTE_TONE: Record<QuoteMatch, string> = {
+  VERBATIM: "text-verified",
+  ALTERED: "text-mismatch",
+  ABSENT: "text-not-found",
+  INDETERMINATE: "text-unknown",
 };
 
 /** A source reports what it was in a position to say, not merely hit or miss. */
@@ -114,13 +163,14 @@ function explainNonJson(status: number, fallback: string): string {
 }
 
 export function Verifier() {
-  const [mode, setMode] = useState<Mode>("paste");
+  const [mode, setMode] = useState<Mode>("pdf");
   const [text, setText] = useState(`${CONTROLS.positive}\n${CONTROLS.negative}`);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PdfVerifyResponse | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function runVerifyPaste(payload?: string) {
@@ -157,20 +207,58 @@ export function Verifier() {
     }
     setLoading(true);
     setError(null);
+    setProgress(null);
     try {
+      // Extract first, and only extract: this request stays short whatever the
+      // document's length.
       const body = new FormData();
       body.append("file", pdf);
-      body.append("verify", "true");
+      body.append("verify", "false");
       const res = await fetch("/api/verify-pdf", { method: "POST", body });
-      const json = await readJson<PdfVerifyResponse>(res, "PDF verification failed");
-      if (!res.ok) throw new Error(json.error || "PDF verification failed");
-      startTransition(() => setData(json));
+      const base = await readJson<PdfVerifyResponse>(res, "PDF verification failed");
+      if (!res.ok) throw new Error(base.error || "PDF verification failed");
+
+      const queue = base.extraction?.verifyQueue ?? [];
+      startTransition(() => setData({ ...base, verified: queue.length === 0 }));
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (!queue.length) return;
+
+      // Then verify in batches, showing each one as it lands rather than
+      // holding everything back until the last authority resolves.
+      const collected: LookupResult[] = [];
+      for (let i = 0; i < queue.length; i += VERIFY_BATCH) {
+        const slice = queue.slice(i, i + VERIFY_BATCH);
+        setProgress({ done: i, total: queue.length });
+        const batchRes = await fetch("/api/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ citations: slice.join("\n") }),
+        });
+        const batch = await readJson<VerifyResponse>(batchRes, "Verification failed");
+        if (!batchRes.ok) {
+          throw new Error(
+            (batch as { error?: string }).error ||
+              `Verification failed after ${collected.length} of ${queue.length} authorities.`,
+          );
+        }
+        collected.push(...batch.results);
+        const snapshot = [...collected];
+        startTransition(() =>
+          setData({
+            ...base,
+            verified: true,
+            results: snapshot,
+            resultCount: snapshot.length,
+            counts: tallyConsensus(snapshot),
+          }),
+        );
+      }
+      setProgress(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "PDF verification failed");
-      setData(null);
     } finally {
       setLoading(false);
+      setProgress(null);
     }
   }
 
@@ -195,13 +283,13 @@ export function Verifier() {
 
   return (
     <div className="w-full max-w-3xl">
-      <div className="mb-3 flex gap-1 border-b border-[var(--line)]">
+      <div className="no-print mb-3 flex gap-1 border-b border-[var(--line)]">
+        <ModeTab active={mode === "pdf"} onClick={() => setMode("pdf")} label="Upload a filing" />
         <ModeTab active={mode === "paste"} onClick={() => setMode("paste")} label="Paste cites" />
-        <ModeTab active={mode === "pdf"} onClick={() => setMode("pdf")} label="Upload PDF" />
       </div>
 
       {mode === "paste" ? (
-        <div className="textarea-shell rounded-sm border border-[var(--line)] bg-[rgba(11,20,16,0.55)] backdrop-blur-sm transition-shadow">
+        <div className="no-print textarea-shell rounded-sm border border-[var(--line)] bg-[rgba(11,20,16,0.55)] backdrop-blur-sm transition-shadow">
           <label htmlFor="citations" className="sr-only">
             Citations to verify
           </label>
@@ -223,7 +311,7 @@ export function Verifier() {
         </div>
       ) : (
         <div
-          className={`textarea-shell rounded-sm border border-dashed bg-[rgba(11,20,16,0.55)] backdrop-blur-sm transition-shadow ${
+          className={`no-print textarea-shell rounded-sm border border-dashed bg-[rgba(11,20,16,0.55)] backdrop-blur-sm transition-shadow ${
             dragOver ? "border-brass/70" : "border-[var(--line)]"
           }`}
           onDragOver={(e) => {
@@ -287,7 +375,7 @@ export function Verifier() {
       )}
 
       {mode === "paste" && (
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="no-print mt-4 flex flex-wrap gap-2">
           {EXAMPLES.slice(0, 4).map((ex) => (
             <button
               key={ex}
@@ -323,6 +411,27 @@ export function Verifier() {
 
       {data && (
         <section id="results" className="mt-10 scroll-mt-8" aria-live="polite">
+          <PrintHeader data={data} />
+          {progress && progress.total > 0 ? (
+            <div className="no-print mb-5 border border-[var(--line)] bg-ink-lift/70 px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.12em] text-brass">
+                Verifying {Math.min(progress.done + VERIFY_BATCH, progress.total)} of{" "}
+                {progress.total} authorities
+              </p>
+              <div className="mt-2 h-px w-full bg-[var(--line)]">
+                <div
+                  className="h-px bg-brass transition-all"
+                  style={{
+                    width: `${Math.round((Math.min(progress.done + VERIFY_BATCH, progress.total) / progress.total) * 100)}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-parchment-dim">
+                Sent in batches so no single request outlives the server&apos;s limit. Results
+                appear as each batch lands.
+              </p>
+            </div>
+          ) : null}
           {data.document && data.extraction && (
             <div className="mb-6 border border-[var(--line)] bg-ink-lift/70 px-4 py-4 md:px-5">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
@@ -392,8 +501,109 @@ export function Verifier() {
               ))}
             </ul>
           )}
+
+          {data.results.length > 0 && <ReportBar data={data} />}
         </section>
       )}
+    </div>
+  );
+}
+
+/**
+ * The report controls.
+ *
+ * JSON is the exact record — every outcome, coverage line and source URL, so a
+ * later reader can reconstruct what was known. Print is the filable form: the
+ * browser's own PDF export, which needs no server and no dependency, driven by
+ * the print stylesheet.
+ */
+function ReportBar({
+  data,
+}: {
+  data: PdfVerifyResponse;
+}) {
+  const report = buildReport(data, {
+    document: data.document
+      ? { fileName: data.document.fileName, pageCount: data.document.pageCount }
+      : undefined,
+  });
+
+  function download() {
+    const blob = new Blob([JSON.stringify(report, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = reportFileName(report);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="no-print mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] pt-4">
+      <p className="text-xs text-parchment-dim">
+        Report <span className="text-brass">{report.id}</span> · generated{" "}
+        {new Date(report.generatedAt).toLocaleString()} · {report.summary.citations}{" "}
+        authorit{report.summary.citations === 1 ? "y" : "ies"}
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={download}
+          className="rounded-sm border border-[var(--line)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-parchment-dim transition hover:border-brass hover:text-brass"
+        >
+          Download JSON
+        </button>
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="rounded-sm border border-[var(--line)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-parchment-dim transition hover:border-brass hover:text-brass"
+        >
+          Print / Save as PDF
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The record's header, which only exists on paper. On screen the page already
+ * says what this is; printed, the sheet has to stand on its own — when it was
+ * run, against what, by what method, and what the method could not reach.
+ */
+function PrintHeader({ data }: { data: PdfVerifyResponse }) {
+  const report = buildReport(data, {
+    document: data.document
+      ? { fileName: data.document.fileName, pageCount: data.document.pageCount }
+      : undefined,
+  });
+
+  return (
+    <div className="print-only">
+      <h1>Citation verification report</h1>
+      <p>
+        Report {report.id} · generated {new Date(report.generatedAt).toISOString()}
+        {report.document ? ` · ${report.document.fileName} (${report.document.pageCount} pp.)` : ""}
+      </p>
+      <p>
+        {report.summary.citations} authorit{report.summary.citations === 1 ? "y" : "ies"} checked ·{" "}
+        {CONSENSUS_KINDS.filter((k) => report.summary.existence[k] > 0)
+          .map((k) => `${report.summary.existence[k]} ${STATUS_LABEL[k].toLowerCase()}`)
+          .join(" · ")}
+      </p>
+      <p>Sources: {(report.methodology.sources ?? []).join("; ")}</p>
+      {report.methodology.controls ? (
+        <p>
+          Method controls: {report.methodology.controls.positive} (must resolve);{" "}
+          {report.methodology.controls.negative} (must not resolve)
+        </p>
+      ) : null}
+      <ul>
+        {report.caveats.map((c, i) => (
+          <li key={i}>{c}</li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -465,7 +675,7 @@ function ResultRow({ result }: { result: LookupResult }) {
             {result.reporterPin ? (
               <>
                 {" "}
-                · pin <span className="text-brass">{result.reporterPin}</span>
+                · cite <span className="text-brass">{result.reporterPin}</span>
               </>
             ) : null}
             {result.wlPin ? (
@@ -476,11 +686,23 @@ function ResultRow({ result }: { result: LookupResult }) {
             ) : null}
           </p>
         </div>
-        <span
-          className={`status-${result.consensus} shrink-0 rounded-sm border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em]`}
-        >
-          {STATUS_LABEL[result.consensus]}
-        </span>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <span
+            className={`status-${result.consensus} rounded-sm border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em]`}
+          >
+            {STATUS_LABEL[result.consensus]}
+          </span>
+          {/* Existence and support are separate questions, so they get
+              separate chips: a real case can still be quoted for language it
+              does not contain, and one verdict cannot carry both. */}
+          {result.support.verdict !== "NO_QUOTE" ? (
+            <span
+              className={`${SUPPORT_TONE[result.support.verdict]} rounded-sm border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em]`}
+            >
+              {SUPPORT_LABEL[result.support.verdict]}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <p className="mt-3 text-sm text-parchment-dim">{STATUS_HINT[result.consensus]}</p>
@@ -495,6 +717,50 @@ function ResultRow({ result }: { result: LookupResult }) {
             </span>
           ) : null}
         </p>
+      ) : null}
+
+      {result.support.quotes.length || result.support.pin ? (
+        <div className="mt-4 border-l-2 border-[var(--line)] pl-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
+            Quoted language
+            {result.support.textSource ? (
+              <span className="font-normal normal-case tracking-normal text-parchment-dim">
+                {" "}
+                · read from{" "}
+                {result.support.textSource === "courtlistener"
+                  ? "CourtListener"
+                  : "CAP"}
+              </span>
+            ) : null}
+          </p>
+
+          {result.support.quotes.map((q, i) => (
+            <div key={i} className="mt-2">
+              <p className="text-sm text-parchment">
+                <span className={`mr-2 text-xs font-medium ${QUOTE_TONE[q.match]}`}>
+                  {QUOTE_LABEL[q.match]}
+                </span>
+                <span className="text-parchment-dim">“{q.passage}”</span>
+              </p>
+              {q.note ? (
+                <p className="mt-1 text-xs leading-relaxed text-parchment-dim">{q.note}</p>
+              ) : null}
+            </div>
+          ))}
+
+          {result.support.pin ? (
+            <p className="mt-2 text-sm text-parchment-dim">
+              Pin page {result.support.pin.page}:{" "}
+              {result.support.pin.present === null
+                ? result.support.textSource
+                  ? "the retrieved text carries no pagination markers, so this was not checked"
+                  : "the opinion text could not be retrieved, so this was not checked"
+                : result.support.pin.present
+                  ? "present in the opinion"
+                  : "not found in the opinion's pagination"}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">

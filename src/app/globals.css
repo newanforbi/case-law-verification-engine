@@ -1,0 +1,195 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #0b1410;
+  --ink-lift: #132019;
+  --ink-edge: #1c2e24;
+  --brass: #c9a66b;
+  --brass-soft: #e0c48a;
+  --parchment: #ede6d6;
+  --parchment-dim: #b8b09e;
+  --verified: #5faf7a;
+  --partial: #7eb8c9;
+  --mismatch: #d4a017;
+  --not-found: #c45c4a;
+  --unknown: #8a8578;
+  --line: rgba(201, 166, 107, 0.22);
+  --glow: rgba(201, 166, 107, 0.12);
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-lift: var(--ink-lift);
+  --color-ink-edge: var(--ink-edge);
+  --color-brass: var(--brass);
+  --color-brass-soft: var(--brass-soft);
+  --color-parchment: var(--parchment);
+  --color-parchment-dim: var(--parchment-dim);
+  --color-verified: var(--verified);
+  --color-partial: var(--partial);
+  --color-mismatch: var(--mismatch);
+  --color-not-found: var(--not-found);
+  --color-unknown: var(--unknown);
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-outfit);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--parchment);
+  background: var(--ink);
+  font-family: var(--font-outfit), "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(201, 166, 107, 0.35);
+  color: var(--parchment);
+}
+
+.atmosphere {
+  background:
+    radial-gradient(1200px 700px at 12% -10%, rgba(201, 166, 107, 0.16), transparent 55%),
+    radial-gradient(900px 600px at 88% 8%, rgba(95, 175, 122, 0.1), transparent 50%),
+    radial-gradient(800px 500px at 50% 100%, rgba(28, 46, 36, 0.9), transparent 60%),
+    linear-gradient(165deg, #0b1410 0%, #101c15 42%, #0d1712 100%);
+}
+
+.grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
+}
+
+.spine-plane {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 46px,
+      rgba(201, 166, 107, 0.035) 46px,
+      rgba(201, 166, 107, 0.035) 48px
+    ),
+    linear-gradient(180deg, transparent 0%, rgba(11, 20, 16, 0.15) 55%, rgba(11, 20, 16, 0.75) 100%);
+  mask-image: linear-gradient(90deg, transparent, black 18%, black 82%, transparent);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes brand-glow {
+  0%,
+  100% {
+    text-shadow: 0 0 0 transparent;
+  }
+  50% {
+    text-shadow: 0 0 28px rgba(201, 166, 107, 0.22);
+  }
+}
+
+@keyframes pulse-line {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@keyframes result-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.anim-rise {
+  animation: rise-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-rise-delay-1 {
+  animation: rise-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+}
+
+.anim-rise-delay-2 {
+  animation: rise-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.24s both;
+}
+
+.anim-rise-delay-3 {
+  animation: rise-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.36s both;
+}
+
+.brand-pulse {
+  animation: brand-glow 5.5s ease-in-out infinite;
+}
+
+.line-pulse {
+  animation: pulse-line 3.2s ease-in-out infinite;
+}
+
+.result-enter {
+  animation: result-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.textarea-shell:focus-within {
+  border-color: rgba(201, 166, 107, 0.55);
+  box-shadow: 0 0 0 3px rgba(201, 166, 107, 0.12);
+}
+
+.status-FOUND {
+  color: var(--verified);
+  border-color: rgba(95, 175, 122, 0.45);
+  background: rgba(95, 175, 122, 0.1);
+}
+
+.status-PARTIAL {
+  color: var(--partial);
+  border-color: rgba(126, 184, 201, 0.45);
+  background: rgba(126, 184, 201, 0.1);
+}
+
+.status-CAPTION_MISMATCH {
+  color: var(--mismatch);
+  border-color: rgba(212, 160, 23, 0.45);
+  background: rgba(212, 160, 23, 0.1);
+}
+
+.status-NOT_FOUND {
+  color: var(--not-found);
+  border-color: rgba(196, 92, 74, 0.45);
+  background: rgba(196, 92, 74, 0.1);
+}
+
+.status-UNKNOWN {
+  color: var(--unknown);
+  border-color: rgba(138, 133, 120, 0.45);
+  background: rgba(138, 133, 120, 0.1);
+}

@@ -34,6 +34,7 @@ function verdict(
     consensus: "UNKNOWN",
     matchedName: "",
     matchedCitations: [],
+    support: { verdict: "NO_QUOTE", quotes: [], pin: null },
   };
   return applyConsensus(result);
 }

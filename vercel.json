@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "functions": {
+    "src/app/api/verify/route.ts": {
+      "maxDuration": 120,
+      "memory": 1024
+    },
+    "src/app/api/verify-pdf/route.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    }
+  }
+}

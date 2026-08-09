@@ -69,6 +69,28 @@ npm run test:pdf           # sample pleading PDF → extract → verify controls
 npm run build
 ```
 
+## Deploy (Vercel)
+
+Import the GitHub repo in Vercel (Framework Preset: Next.js). `vercel.json` sets:
+
+| Route | maxDuration | memory |
+|---|---|---|
+| `/api/verify` | 120s | 1024 MB |
+| `/api/verify-pdf` | 300s | 1024 MB |
+
+Notes for a clean deploy:
+
+- **Node 20+** (`engines` in `package.json`)
+- **Fluid compute** should stay enabled (Hobby max duration is 300s with Fluid)
+- **PDF uploads capped at 4 MB** — Vercel Functions reject bodies over 4.5 MB
+- No secrets required; CourtListener search + CAP `static.case.law` are unauthenticated
+- Region pinned to `iad1` in `vercel.json` (change if you prefer)
+
+```bash
+npx vercel            # preview
+npx vercel --prod     # production
+```
+
 ## Stack
 
 Next.js (App Router) + TypeScript + `pdf-parse`. Verification core in `src/lib/verify/`; citation pairing in `src/lib/citations/` (from PR #493 `build-citation-index.py` / `lookup-citations.py`). UI brand: **Citeproof**.

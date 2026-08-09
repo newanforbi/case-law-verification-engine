@@ -193,7 +193,7 @@ export function Verifier() {
                   </span>
                 </p>
               ) : (
-                <p className="text-sm text-parchment-dim">PDF up to 12 MB · text layer required</p>
+                <p className="text-sm text-parchment-dim">PDF up to 4 MB · text layer required</p>
               )}
             </div>
           </div>

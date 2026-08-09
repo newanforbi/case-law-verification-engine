@@ -1,16 +1,35 @@
 import { lookupCap } from "./cap";
 import { lookupCourtListener } from "./courtlistener";
 import { namesCompatible } from "./names";
+import { fetchOpinionText } from "./opinion";
+import {
+  extractQuotedPassages,
+  matchPassage,
+  pageLabelsIn,
+  parsePinCite,
+} from "./quotes";
 import { guessName, parseReporter, WL_RE } from "./reporters";
 import { CONSENSUS_KINDS } from "./types";
-import type { Consensus, LookupResult, VerifyResponse } from "./types";
+import type {
+  Consensus,
+  LookupResult,
+  PinFinding,
+  Support,
+  SupportReport,
+  VerifyResponse,
+} from "./types";
 
-export { CONSENSUS_KINDS } from "./types";
+export { CONSENSUS_KINDS, SUPPORT_KINDS } from "./types";
 export type {
   Consensus,
   LookupResult,
+  PinFinding,
+  QuoteFinding,
+  QuoteMatch,
   SourceHit,
   SourceOutcome,
+  Support,
+  SupportReport,
   VerifyResponse,
 } from "./types";
 
@@ -95,6 +114,68 @@ export function applyConsensus(result: LookupResult): Consensus {
   return result.consensus;
 }
 
+/**
+ * Check the quoted language and pin page against the opinion's own words.
+ *
+ * Only reachable once a source has resolved the case, since there is nothing
+ * to read otherwise, and it will not report a quote missing from text it could
+ * not retrieve — the same rule the existence probe follows about absence.
+ */
+async function evaluateSupport(
+  citation: string,
+  result: LookupResult,
+): Promise<SupportReport> {
+  const passages = extractQuotedPassages(citation);
+  const rep = parseReporter(citation);
+  const pinCite = rep ? parsePinCite(citation, rep.page) : null;
+
+  if (!passages.length && !pinCite) {
+    return { verdict: "NO_QUOTE", quotes: [], pin: null };
+  }
+
+  const found = result.sources.filter((s) => s.outcome === "FOUND");
+  const opinion = await fetchOpinionText({
+    capUrl: found.find((s) => s.source === "case.law_static")?.url,
+    courtListenerUrl: found.find((s) => s.source === "courtlistener")?.url,
+  });
+  if (!opinion) {
+    return {
+      verdict: "UNCHECKED",
+      quotes: passages.map((passage) => ({ passage, match: "INDETERMINATE" as const })),
+      pin: pinCite ? { page: pinCite.pinPage, present: null } : null,
+    };
+  }
+
+  const quotes = passages.map((passage) => matchPassage(passage, opinion.text));
+
+  let pin: PinFinding | null = null;
+  if (pinCite) {
+    const labels = pageLabelsIn(opinion.text);
+    // No markers at all means the pagination is invisible to us, not that the
+    // page is missing from the opinion.
+    pin = {
+      page: pinCite.pinPage,
+      present: labels.size ? labels.has(pinCite.pinPage) : null,
+    };
+  }
+
+  let verdict: Support;
+  if (quotes.some((q) => q.match === "ABSENT")) verdict = "UNSUPPORTED";
+  else if (quotes.some((q) => q.match === "ALTERED") || pin?.present === false)
+    verdict = "QUALIFIED";
+  else if (quotes.length && quotes.every((q) => q.match === "INDETERMINATE"))
+    verdict = "INDETERMINATE";
+  else verdict = "SUPPORTED";
+
+  return {
+    verdict,
+    quotes,
+    pin,
+    textSource: opinion.source,
+    textUrl: opinion.url,
+  };
+}
+
 export async function lookupOne(citation: string): Promise<LookupResult> {
   const name = guessName(citation);
   const rep = parseReporter(citation);
@@ -108,6 +189,7 @@ export async function lookupOne(citation: string): Promise<LookupResult> {
     consensus: "UNKNOWN",
     matchedName: "",
     matchedCitations: [],
+    support: { verdict: "NO_QUOTE", quotes: [], pin: null },
   };
 
   // Run both working sources in parallel.
@@ -117,6 +199,7 @@ export async function lookupOne(citation: string): Promise<LookupResult> {
   ]);
   result.sources.push(cl, cap);
   applyConsensus(result);
+  result.support = await evaluateSupport(citation, result);
   return result;
 }
 
@@ -173,7 +256,7 @@ export async function verifyCitations(raw: string): Promise<VerifyResponse> {
         "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
       ],
       reference:
-        "Coverage-aware existence probe: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it.",
+        "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it, and quoted language is checked against the opinion's own text where that text can be retrieved.",
       controls: {
         positive: CONTROLS.positive,
         negative: CONTROLS.negative,

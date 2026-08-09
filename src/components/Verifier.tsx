@@ -4,7 +4,9 @@ import { startTransition, useRef, useState } from "react";
 import type {
   Consensus,
   LookupResult,
+  QuoteMatch,
   SourceOutcome,
+  Support,
   VerifyResponse,
 } from "@/lib/verify";
 import { CONSENSUS_KINDS, CONTROLS, EXAMPLES } from "@/lib/verify/client-constants";
@@ -60,6 +62,38 @@ const STATUS_HINT: Record<Consensus, string> = {
   UNCHECKED:
     "A source was unreachable, so this citation was never actually checked. Re-run before relying on it.",
   UNKNOWN: "No reporter or Westlaw pin could be parsed from this line.",
+};
+
+const SUPPORT_LABEL: Record<Support, string> = {
+  SUPPORTED: "Quote checks out",
+  QUALIFIED: "Quote altered",
+  UNSUPPORTED: "Quote not in opinion",
+  INDETERMINATE: "Quote too short to judge",
+  NO_QUOTE: "",
+  UNCHECKED: "Quote not checked",
+};
+
+const SUPPORT_TONE: Record<Support, string> = {
+  SUPPORTED: "status-FOUND",
+  QUALIFIED: "status-CAPTION_MISMATCH",
+  UNSUPPORTED: "status-NOT_FOUND",
+  INDETERMINATE: "status-UNKNOWN",
+  NO_QUOTE: "status-UNKNOWN",
+  UNCHECKED: "status-UNCHECKED",
+};
+
+const QUOTE_LABEL: Record<QuoteMatch, string> = {
+  VERBATIM: "Verbatim",
+  ALTERED: "Altered",
+  ABSENT: "Not in opinion",
+  INDETERMINATE: "Inconclusive",
+};
+
+const QUOTE_TONE: Record<QuoteMatch, string> = {
+  VERBATIM: "text-verified",
+  ALTERED: "text-mismatch",
+  ABSENT: "text-not-found",
+  INDETERMINATE: "text-unknown",
 };
 
 /** A source reports what it was in a position to say, not merely hit or miss. */
@@ -420,7 +454,7 @@ function ResultRow({ result }: { result: LookupResult }) {
             {result.reporterPin ? (
               <>
                 {" "}
-                · pin <span className="text-brass">{result.reporterPin}</span>
+                · cite <span className="text-brass">{result.reporterPin}</span>
               </>
             ) : null}
             {result.wlPin ? (
@@ -431,11 +465,23 @@ function ResultRow({ result }: { result: LookupResult }) {
             ) : null}
           </p>
         </div>
-        <span
-          className={`status-${result.consensus} shrink-0 rounded-sm border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em]`}
-        >
-          {STATUS_LABEL[result.consensus]}
-        </span>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <span
+            className={`status-${result.consensus} rounded-sm border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em]`}
+          >
+            {STATUS_LABEL[result.consensus]}
+          </span>
+          {/* Existence and support are separate questions, so they get
+              separate chips: a real case can still be quoted for language it
+              does not contain, and one verdict cannot carry both. */}
+          {result.support.verdict !== "NO_QUOTE" ? (
+            <span
+              className={`${SUPPORT_TONE[result.support.verdict]} rounded-sm border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em]`}
+            >
+              {SUPPORT_LABEL[result.support.verdict]}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <p className="mt-3 text-sm text-parchment-dim">{STATUS_HINT[result.consensus]}</p>
@@ -450,6 +496,50 @@ function ResultRow({ result }: { result: LookupResult }) {
             </span>
           ) : null}
         </p>
+      ) : null}
+
+      {result.support.quotes.length || result.support.pin ? (
+        <div className="mt-4 border-l-2 border-[var(--line)] pl-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
+            Quoted language
+            {result.support.textSource ? (
+              <span className="font-normal normal-case tracking-normal text-parchment-dim">
+                {" "}
+                · read from{" "}
+                {result.support.textSource === "courtlistener"
+                  ? "CourtListener"
+                  : "CAP"}
+              </span>
+            ) : null}
+          </p>
+
+          {result.support.quotes.map((q, i) => (
+            <div key={i} className="mt-2">
+              <p className="text-sm text-parchment">
+                <span className={`mr-2 text-xs font-medium ${QUOTE_TONE[q.match]}`}>
+                  {QUOTE_LABEL[q.match]}
+                </span>
+                <span className="text-parchment-dim">“{q.passage}”</span>
+              </p>
+              {q.note ? (
+                <p className="mt-1 text-xs leading-relaxed text-parchment-dim">{q.note}</p>
+              ) : null}
+            </div>
+          ))}
+
+          {result.support.pin ? (
+            <p className="mt-2 text-sm text-parchment-dim">
+              Pin page {result.support.pin.page}:{" "}
+              {result.support.pin.present === null
+                ? result.support.textSource
+                  ? "the retrieved text carries no pagination markers, so this was not checked"
+                  : "the opinion text could not be retrieved, so this was not checked"
+                : result.support.pin.present
+                  ? "present in the opinion"
+                  : "not found in the opinion's pagination"}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">

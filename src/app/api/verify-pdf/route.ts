@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { extractCitationsFromPages } from "@/lib/citations/extract";
 import { extractPdfText } from "@/lib/pdf/extract";
 import { lookupOne, tallyConsensus, type LookupResult } from "@/lib/verify";
+import {
+  MAX_PDF_BYTES,
+  MAX_PDF_LABEL,
+  describeBytes,
+} from "@/lib/verify/client-constants";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +37,22 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Only PDF uploads are supported." },
         { status: 400 },
+      );
+    }
+
+    // Vercel refuses an oversized body before this route runs, and its refusal
+    // is an HTML page. This one is for every other way the request can arrive
+    // — local, self-hosted, a platform that lets it through — so the answer is
+    // JSON the client can actually read.
+    if (file.size > MAX_PDF_BYTES) {
+      return NextResponse.json(
+        {
+          error: `That PDF is ${describeBytes(file.size)}, over the ${MAX_PDF_LABEL} upload limit.`,
+          fileName: file.name,
+          bytes: file.size,
+          limitBytes: MAX_PDF_BYTES,
+        },
+        { status: 413 },
       );
     }
 

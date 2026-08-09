@@ -12,25 +12,27 @@ export default function Home() {
         <header className="flex items-center justify-between gap-4 anim-rise">
           {/* The mark is the word's C, so the wordmark art is the master with
               its own C cropped off at the i's stem, and the mark is set as a
-              versal: its ink runs 1.25x the letters' cap height, rising above
-              the ascenders while still sitting on the baseline. Keeping that
-              baseline is what the margins are for -- the mark's ink bottom is
-              250/256 down its box, the letters' baseline 340/407 down theirs,
-              so the word drops by the difference (9.6/12/14.2px). The gap is
+              versal: its ink runs 1.34x the letters' cap height, rising above
+              the ascenders and hanging a notch below the baseline. Holding
+              that baseline is what the margins are for -- the mark's ink
+              bottom is 250/256 down its box, the letters' baseline 340/407
+              down theirs, so the word drops by the difference
+              (13.5/15.9/19.1px) and the mark's own small top margin is the
+              notch it hangs by. The gap is
               the art's own 35/407 C-to-i letterfit, scaled with the versal and
               less the mark's 21/256 right bearing. */}
           <Link
             href="/"
             aria-label="Citeproof"
-            className="flex items-start gap-[1px] no-underline sm:gap-[1.1px] md:gap-[1.3px]"
+            className="flex items-start gap-[1px] no-underline sm:gap-[1.2px] md:gap-[1.4px]"
           >
             <Image
               src="/brand/citeproof-icon-256.png"
               alt=""
               width={256}
               height={256}
-              sizes="(min-width: 768px) 71px, (min-width: 640px) 61px, 50px"
-              className="mt-[2.1px] h-[3.125rem] w-[3.125rem] sm:mt-[2.6px] sm:h-[3.8125rem] sm:w-[3.8125rem] md:mt-[3px] md:h-[4.4375rem] md:w-[4.4375rem]"
+              sizes="(min-width: 768px) 76px, (min-width: 640px) 65px, 54px"
+              className="mt-[2.1px] h-[3.375rem] w-[3.375rem] sm:mt-[2.6px] sm:h-[4.0625rem] sm:w-[4.0625rem] md:mt-[3px] md:h-[4.75rem] md:w-[4.75rem]"
               priority
             />
             <Image
@@ -39,7 +41,7 @@ export default function Home() {
               width={1617}
               height={407}
               sizes="(min-width: 768px) 262px, (min-width: 640px) 227px, 187px"
-              className="mt-[9.6px] h-[2.9375rem] w-auto sm:mt-[12px] sm:h-[3.5625rem] md:mt-[14.2px] md:h-[4.125rem]"
+              className="mt-[13.5px] h-[2.9375rem] w-auto sm:mt-[15.9px] sm:h-[3.5625rem] md:mt-[19.1px] md:h-[4.125rem]"
               priority
             />
           </Link>

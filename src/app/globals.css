@@ -155,6 +155,38 @@ body {
   animation: pulse-line 3.2s ease-in-out infinite;
 }
 
+/* The brand lockup: the mark stands in for the word's capital C, so the two
+   are set as one line of type. Every measurement derives from --lockup-word,
+   the height of the wordmark art, and the ratios come from the art itself.
+   The wordmark box is 1953x407 with the letters' cap at 332, their baseline
+   at 340 and the C-to-i letterfit at 35; the mark box is 256x256 with 244 of
+   ink whose bottom sits at 250, and a 21px right bearing. The mark runs 1.34x
+   the cap height -- a versal, above the ascenders -- and hangs a notch below
+   the baseline, which is what the two margins are doing: the word drops so
+   its baseline meets the mark's ink bottom, and the mark drops by the notch.
+   An instance only has to set --lockup-word. */
+.lockup {
+  --lockup-mark: calc(var(--lockup-word) * 1.146816);
+  --lockup-notch: calc(var(--lockup-word) * 0.0606);
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--lockup-word) * 0.115233 - var(--lockup-mark) * 0.082031);
+}
+
+.lockup-mark {
+  height: var(--lockup-mark);
+  width: var(--lockup-mark);
+  margin-top: var(--lockup-notch);
+}
+
+.lockup-word {
+  height: var(--lockup-word);
+  width: auto;
+  margin-top: calc(
+    var(--lockup-mark) * 0.976563 - var(--lockup-word) * 0.835381
+  );
+}
+
 .result-enter {
   animation: result-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

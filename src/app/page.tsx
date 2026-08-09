@@ -1,5 +1,5 @@
-import Image from "next/image";
 import Link from "next/link";
+import { LockupArt } from "@/components/Lockup";
 import { Verifier } from "@/components/Verifier";
 
 export default function Home() {
@@ -10,21 +10,14 @@ export default function Home() {
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-20 pt-6 md:px-8 md:pt-8">
         <header className="flex items-center justify-between gap-4 anim-rise">
-          <Link href="/" className="flex items-center gap-3.5 no-underline">
-            <Image
-              src="/brand/citeproof-icon-256.png"
-              alt=""
-              width={72}
-              height={72}
-              className="h-16 w-16 md:h-[4.5rem] md:w-[4.5rem]"
-              priority
-            />
-            <Image
-              src="/brand/citeproof-wordmark-header.png"
-              alt="Citeproof"
-              width={170}
-              height={36}
-              className="h-7 w-auto md:h-8"
+          <Link
+            href="/"
+            aria-label="Citeproof"
+            className="lockup [--lockup-word:2.9375rem] no-underline sm:[--lockup-word:3.5625rem] md:[--lockup-word:4.125rem]"
+          >
+            <LockupArt
+              markSizes="(min-width: 768px) 76px, (min-width: 640px) 65px, 54px"
+              wordSizes="(min-width: 768px) 262px, (min-width: 640px) 227px, 187px"
               priority
             />
           </Link>
@@ -42,10 +35,7 @@ export default function Home() {
           </div>
 
           <div className="relative max-w-3xl">
-            <p className="anim-rise font-[family-name:var(--font-fraunces)] brand-pulse text-5xl leading-[0.95] tracking-tight text-parchment sm:text-6xl md:text-7xl lg:text-8xl">
-              Citeproof
-            </p>
-            <div className="anim-rise-delay-1 line-pulse mt-5 h-px w-24 bg-brass/70" />
+            <div className="anim-rise line-pulse h-px w-24 bg-brass/70" />
             <h1 className="anim-rise-delay-1 mt-6 max-w-xl font-[family-name:var(--font-fraunces)] text-2xl leading-snug text-parchment sm:text-3xl md:text-[2.15rem]">
               Verify case law before the hallucination hits the filing.
             </h1>

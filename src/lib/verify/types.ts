@@ -19,6 +19,17 @@ export const CONSENSUS_KINDS = [
 
 export type Consensus = (typeof CONSENSUS_KINDS)[number];
 
+export function tallyConsensus(
+  results: Array<{ consensus: Consensus }>,
+): Record<Consensus, number> {
+  const counts = Object.fromEntries(CONSENSUS_KINDS.map((k) => [k, 0])) as Record<
+    Consensus,
+    number
+  >;
+  for (const r of results) counts[r.consensus] += 1;
+  return counts;
+}
+
 
 /**
  * What one source was actually able to say about a citation.
@@ -89,6 +100,8 @@ export interface LookupResult {
   matchedName: string;
   matchedCitations: string[];
   support: SupportReport;
+  /** Set only when the lookup itself failed, rather than the citation. */
+  error?: string;
 }
 
 export interface VerifyResponse {

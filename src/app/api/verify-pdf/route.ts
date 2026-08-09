@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { extractCitationsFromPages } from "@/lib/citations/extract";
 import { extractPdfText } from "@/lib/pdf/extract";
-import { lookupOne, tallyConsensus, type LookupResult } from "@/lib/verify";
+import {
+  CONTROLS,
+  lookupOneSafe,
+  tallyConsensus,
+  type LookupResult,
+  type VerifyResponse,
+} from "@/lib/verify";
 import {
   MAX_PDF_BYTES,
   MAX_PDF_LABEL,
@@ -15,6 +21,7 @@ export const maxDuration = 300;
 const MAX_VERIFY = 40;
 
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   try {
     const form = await request.formData();
     const file = form.get("file");
@@ -80,7 +87,7 @@ export async function POST(request: Request) {
     const results: LookupResult[] = [];
     if (verifyFlag && cites.verifyQueue.length) {
       for (const citation of cites.verifyQueue) {
-        results.push(await lookupOne(citation));
+        results.push(await lookupOneSafe(citation));
       }
     }
 
@@ -99,10 +106,12 @@ export async function POST(request: Request) {
           "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
         ],
         reference:
-          "PDF extract + citation pairing, then dual-source existence probe via CourtListener + CAP static.case.law",
-        extraction:
-          "pdf-parse text layer → reporter/Westlaw + case-name pairing → dual-source verify",
-      },
+          "PDF extract + citation pairing, then coverage-aware existence probe via CourtListener + CAP static.case.law",
+        // The report renders these, and this route used to omit them.
+        controls: { positive: CONTROLS.positive, negative: CONTROLS.negative },
+      } satisfies VerifyResponse["methodology"],
+      extractionMethod:
+        "pdf-parse text layer → reporter/Westlaw + case-name pairing → coverage-aware verify",
       document: {
         fileName: extracted.fileName,
         pageCount: extracted.pageCount,
@@ -122,6 +131,12 @@ export async function POST(request: Request) {
         })),
       },
       verified: verifyFlag,
+      // So the next failure report says what the request was actually doing.
+      diagnostics: {
+        elapsedMs: Date.now() - startedAt,
+        queued: cites.verifyQueue.length,
+        verifiedInRequest: results.length,
+      },
       resultCount: results.length,
       counts,
       results,

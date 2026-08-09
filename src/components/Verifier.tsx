@@ -14,6 +14,7 @@ import {
   CONSENSUS_KINDS,
   CONTROLS,
   EXAMPLES,
+  tallyConsensus,
   MAX_PDF_BYTES,
   MAX_PDF_LABEL,
   describeBytes,
@@ -44,7 +45,20 @@ interface PdfVerifyResponse extends VerifyResponse {
   };
   verified?: boolean;
   error?: string;
+  diagnostics?: { elapsedMs: number; queued: number; verifiedInRequest: number };
 }
+
+/**
+ * How many authorities go up in one verification request.
+ *
+ * Each one makes several upstream calls with deliberate pauses between them,
+ * so a brief with forty authorities is minutes of work — far past what a
+ * serverless function will sit through, and the platform kills it with an
+ * error page rather than anything this app can catch. Extraction is fast, so
+ * the document is parsed in one request and the verifying is done in batches
+ * small enough that no single request can outlive its limit.
+ */
+const VERIFY_BATCH = 5;
 
 const STATUS_LABEL: Record<Consensus, string> = {
   FOUND: "Found",
@@ -149,13 +163,14 @@ function explainNonJson(status: number, fallback: string): string {
 }
 
 export function Verifier() {
-  const [mode, setMode] = useState<Mode>("paste");
+  const [mode, setMode] = useState<Mode>("pdf");
   const [text, setText] = useState(`${CONTROLS.positive}\n${CONTROLS.negative}`);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PdfVerifyResponse | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function runVerifyPaste(payload?: string) {
@@ -192,20 +207,58 @@ export function Verifier() {
     }
     setLoading(true);
     setError(null);
+    setProgress(null);
     try {
+      // Extract first, and only extract: this request stays short whatever the
+      // document's length.
       const body = new FormData();
       body.append("file", pdf);
-      body.append("verify", "true");
+      body.append("verify", "false");
       const res = await fetch("/api/verify-pdf", { method: "POST", body });
-      const json = await readJson<PdfVerifyResponse>(res, "PDF verification failed");
-      if (!res.ok) throw new Error(json.error || "PDF verification failed");
-      startTransition(() => setData(json));
+      const base = await readJson<PdfVerifyResponse>(res, "PDF verification failed");
+      if (!res.ok) throw new Error(base.error || "PDF verification failed");
+
+      const queue = base.extraction?.verifyQueue ?? [];
+      startTransition(() => setData({ ...base, verified: queue.length === 0 }));
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (!queue.length) return;
+
+      // Then verify in batches, showing each one as it lands rather than
+      // holding everything back until the last authority resolves.
+      const collected: LookupResult[] = [];
+      for (let i = 0; i < queue.length; i += VERIFY_BATCH) {
+        const slice = queue.slice(i, i + VERIFY_BATCH);
+        setProgress({ done: i, total: queue.length });
+        const batchRes = await fetch("/api/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ citations: slice.join("\n") }),
+        });
+        const batch = await readJson<VerifyResponse>(batchRes, "Verification failed");
+        if (!batchRes.ok) {
+          throw new Error(
+            (batch as { error?: string }).error ||
+              `Verification failed after ${collected.length} of ${queue.length} authorities.`,
+          );
+        }
+        collected.push(...batch.results);
+        const snapshot = [...collected];
+        startTransition(() =>
+          setData({
+            ...base,
+            verified: true,
+            results: snapshot,
+            resultCount: snapshot.length,
+            counts: tallyConsensus(snapshot),
+          }),
+        );
+      }
+      setProgress(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "PDF verification failed");
-      setData(null);
     } finally {
       setLoading(false);
+      setProgress(null);
     }
   }
 
@@ -231,8 +284,8 @@ export function Verifier() {
   return (
     <div className="w-full max-w-3xl">
       <div className="no-print mb-3 flex gap-1 border-b border-[var(--line)]">
+        <ModeTab active={mode === "pdf"} onClick={() => setMode("pdf")} label="Upload a filing" />
         <ModeTab active={mode === "paste"} onClick={() => setMode("paste")} label="Paste cites" />
-        <ModeTab active={mode === "pdf"} onClick={() => setMode("pdf")} label="Upload PDF" />
       </div>
 
       {mode === "paste" ? (
@@ -359,6 +412,26 @@ export function Verifier() {
       {data && (
         <section id="results" className="mt-10 scroll-mt-8" aria-live="polite">
           <PrintHeader data={data} />
+          {progress && progress.total > 0 ? (
+            <div className="no-print mb-5 border border-[var(--line)] bg-ink-lift/70 px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.12em] text-brass">
+                Verifying {Math.min(progress.done + VERIFY_BATCH, progress.total)} of{" "}
+                {progress.total} authorities
+              </p>
+              <div className="mt-2 h-px w-full bg-[var(--line)]">
+                <div
+                  className="h-px bg-brass transition-all"
+                  style={{
+                    width: `${Math.round((Math.min(progress.done + VERIFY_BATCH, progress.total) / progress.total) * 100)}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-parchment-dim">
+                Sent in batches so no single request outlives the server&apos;s limit. Results
+                appear as each batch lands.
+              </p>
+            </div>
+          ) : null}
           {data.document && data.extraction && (
             <div className="mb-6 border border-[var(--line)] bg-ink-lift/70 px-4 py-4 md:px-5">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
@@ -519,11 +592,13 @@ function PrintHeader({ data }: { data: PdfVerifyResponse }) {
           .map((k) => `${report.summary.existence[k]} ${STATUS_LABEL[k].toLowerCase()}`)
           .join(" · ")}
       </p>
-      <p>Sources: {report.methodology.sources.join("; ")}</p>
-      <p>
-        Method controls: {report.methodology.controls.positive} (must resolve);{" "}
-        {report.methodology.controls.negative} (must not resolve)
-      </p>
+      <p>Sources: {(report.methodology.sources ?? []).join("; ")}</p>
+      {report.methodology.controls ? (
+        <p>
+          Method controls: {report.methodology.controls.positive} (must resolve);{" "}
+          {report.methodology.controls.negative} (must not resolve)
+        </p>
+      ) : null}
       <ul>
         {report.caveats.map((c, i) => (
           <li key={i}>{c}</li>

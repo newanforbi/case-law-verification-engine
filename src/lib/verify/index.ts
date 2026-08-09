@@ -9,7 +9,7 @@ import {
   parsePinCite,
 } from "./quotes";
 import { guessName, parseReporter, WL_RE } from "./reporters";
-import { CONSENSUS_KINDS } from "./types";
+import { tallyConsensus } from "./types";
 import type {
   Consensus,
   LookupResult,
@@ -19,7 +19,7 @@ import type {
   VerifyResponse,
 } from "./types";
 
-export { CONSENSUS_KINDS, SUPPORT_KINDS } from "./types";
+export { CONSENSUS_KINDS, SUPPORT_KINDS, tallyConsensus } from "./types";
 export type {
   Consensus,
   LookupResult,
@@ -37,16 +37,6 @@ export const CONTROLS = {
   positive: "Richardson v. McKnight, 521 U.S. 399 (1997)",
   negative: "In re Leman, 66 Cal.App.5th 200",
 } as const;
-
-export function tallyConsensus(
-  results: Array<Pick<LookupResult, "consensus">>,
-): Record<Consensus, number> {
-  const counts = Object.fromEntries(
-    CONSENSUS_KINDS.map((k) => [k, 0]),
-  ) as Record<Consensus, number>;
-  for (const r of results) counts[r.consensus] += 1;
-  return counts;
-}
 
 export const EXAMPLES = [
   CONTROLS.positive,
@@ -176,6 +166,36 @@ async function evaluateSupport(
   };
 }
 
+/**
+ * lookupOne, with anything it throws turned into a result rather than an
+ * exception.
+ *
+ * A batch runs many of these, and one citation that trips an unforeseen edge
+ * — a malformed pin, a source returning something unparseable — must not cost
+ * the caller every other answer in the batch. The failure is reported as
+ * UNCHECKED, which is what it is: nothing was established about this citation.
+ */
+export async function lookupOneSafe(citation: string): Promise<LookupResult> {
+  try {
+    return await lookupOne(citation);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    const rep = parseReporter(citation);
+    return {
+      query: citation,
+      caseNameGuess: guessName(citation),
+      reporterPin: rep?.pin ?? null,
+      wlPin: citation.match(WL_RE)?.[1] ?? null,
+      sources: [],
+      consensus: "UNCHECKED",
+      matchedName: "",
+      matchedCitations: [],
+      support: { verdict: "UNCHECKED", quotes: [], pin: null },
+      error: `Lookup failed for this citation: ${reason}`,
+    };
+  }
+}
+
 export async function lookupOne(citation: string): Promise<LookupResult> {
   const name = guessName(citation);
   const rep = parseReporter(citation);
@@ -243,7 +263,7 @@ export async function verifyCitations(raw: string): Promise<VerifyResponse> {
 
   const results: LookupResult[] = [];
   for (const cite of cites) {
-    results.push(await lookupOne(cite));
+    results.push(await lookupOneSafe(cite));
   }
 
   const counts = tallyConsensus(results);

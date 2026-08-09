@@ -40,9 +40,9 @@ export default function Home() {
               Verify case law before the hallucination hits the filing.
             </h1>
             <p className="no-print anim-rise-delay-2 mt-4 max-w-lg text-base leading-relaxed text-parchment-dim md:text-lg">
-              Paste cites or upload a pleading PDF. We find the authorities,
-              then probe CourtListener and CAP — the two sources that answer
-              without a login.
+              Upload a filing, or paste cites. We find the authorities, then
+              probe CourtListener and CAP — the two sources that answer without
+              a login.
             </p>
           </div>
 

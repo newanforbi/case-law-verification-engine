@@ -10,21 +10,27 @@ export default function Home() {
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-20 pt-6 md:px-8 md:pt-8">
         <header className="flex items-center justify-between gap-4 anim-rise">
-          <Link href="/" className="flex items-center gap-3.5 no-underline">
+          {/* Mark + wordmark are set as one line of type: the wordmark box is
+              1.18x the mark box, which puts the letters' cap height and their
+              baseline on the mark's own top and bottom, so items-start aligns
+              both. The 'p' descender hangs below the line, as it should. */}
+          <Link href="/" className="flex items-start gap-1 no-underline md:gap-1.5">
             <Image
               src="/brand/citeproof-icon-256.png"
               alt=""
-              width={72}
-              height={72}
-              className="h-16 w-16 md:h-[4.5rem] md:w-[4.5rem]"
+              width={256}
+              height={256}
+              sizes="(min-width: 768px) 56px, (min-width: 640px) 44px, 36px"
+              className="h-9 w-9 sm:h-11 sm:w-11 md:h-14 md:w-14"
               priority
             />
             <Image
-              src="/brand/citeproof-wordmark-header.png"
+              src="/brand/citeproof-wordmark.png"
               alt="Citeproof"
-              width={170}
-              height={36}
-              className="h-7 w-auto md:h-8"
+              width={1200}
+              height={254}
+              sizes="(min-width: 768px) 312px, (min-width: 640px) 246px, 199px"
+              className="h-[2.625rem] w-auto sm:h-[3.25rem] md:h-[4.125rem]"
               priority
             />
           </Link>

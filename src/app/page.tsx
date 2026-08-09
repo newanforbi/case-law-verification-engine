@@ -15,27 +15,31 @@ export default function Home() {
               versal: its ink runs 1.25x the letters' cap height, rising above
               the ascenders while still sitting on the baseline. Keeping that
               baseline is what the margins are for -- the mark's ink bottom is
-              250/256 down its box, the letters' baseline 211/254 down theirs,
-              so the word drops by the difference (9.8/11.2/13.5px). The small
-              negative inset holds the C-to-i letterfit against the mark's own
-              21/256 right bearing, which grows with it. */}
-          <Link href="/" aria-label="Citeproof" className="flex items-start no-underline">
+              250/256 down its box, the letters' baseline 340/407 down theirs,
+              so the word drops by the difference (9.6/12/14.2px). The gap is
+              the art's own 35/407 C-to-i letterfit, scaled with the versal and
+              less the mark's 21/256 right bearing. */}
+          <Link
+            href="/"
+            aria-label="Citeproof"
+            className="flex items-start gap-[1px] no-underline sm:gap-[1.1px] md:gap-[1.3px]"
+          >
             <Image
               src="/brand/citeproof-icon-256.png"
               alt=""
               width={256}
               height={256}
-              sizes="(min-width: 768px) 70px, (min-width: 640px) 60px, 50px"
-              className="h-[3.125rem] w-[3.125rem] sm:h-[3.75rem] sm:w-[3.75rem] md:h-[4.375rem] md:w-[4.375rem]"
+              sizes="(min-width: 768px) 71px, (min-width: 640px) 61px, 50px"
+              className="h-[3.125rem] w-[3.125rem] sm:h-[3.8125rem] sm:w-[3.8125rem] md:h-[4.4375rem] md:w-[4.4375rem]"
               priority
             />
             <Image
               src="/brand/citeproof-wordmark-iteproof.png"
               alt=""
-              width={995}
-              height={254}
-              sizes="(min-width: 768px) 259px, (min-width: 640px) 224px, 185px"
-              className="mt-[9.8px] ml-[-1.1px] h-[2.9375rem] w-auto sm:mt-[11.2px] sm:ml-[-1.3px] sm:h-[3.5625rem] md:mt-[13.5px] md:ml-[-1.5px] md:h-[4.125rem]"
+              width={1617}
+              height={407}
+              sizes="(min-width: 768px) 262px, (min-width: 640px) 227px, 187px"
+              className="mt-[9.6px] h-[2.9375rem] w-auto sm:mt-[12px] sm:h-[3.5625rem] md:mt-[14.2px] md:h-[4.125rem]"
               priority
             />
           </Link>

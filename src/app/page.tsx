@@ -11,19 +11,22 @@ export default function Home() {
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-20 pt-6 md:px-8 md:pt-8">
         <header className="flex items-center justify-between gap-4 anim-rise">
           {/* The mark is the word's C, so the wordmark art is the master with
-              its own C cropped off at the i's stem. The two are set as one
-              line of type: the wordmark box is 1.18x the mark box, which puts
-              the letters' cap height and baseline on the mark's own top and
-              bottom, so items-start aligns them. The p descender hangs below
-              the line, as it should. */}
+              its own C cropped off at the i's stem, and the mark is set as a
+              versal: its ink runs 1.25x the letters' cap height, rising above
+              the ascenders while still sitting on the baseline. Keeping that
+              baseline is what the margins are for -- the mark's ink bottom is
+              250/256 down its box, the letters' baseline 211/254 down theirs,
+              so the word drops by the difference (9.8/11.2/13.5px). The small
+              negative inset holds the C-to-i letterfit against the mark's own
+              21/256 right bearing, which grows with it. */}
           <Link href="/" aria-label="Citeproof" className="flex items-start no-underline">
             <Image
               src="/brand/citeproof-icon-256.png"
               alt=""
               width={256}
               height={256}
-              sizes="(min-width: 768px) 56px, (min-width: 640px) 48px, 40px"
-              className="h-10 w-10 sm:h-12 sm:w-12 md:h-14 md:w-14"
+              sizes="(min-width: 768px) 70px, (min-width: 640px) 60px, 50px"
+              className="h-[3.125rem] w-[3.125rem] sm:h-[3.75rem] sm:w-[3.75rem] md:h-[4.375rem] md:w-[4.375rem]"
               priority
             />
             <Image
@@ -32,7 +35,7 @@ export default function Home() {
               width={995}
               height={254}
               sizes="(min-width: 768px) 259px, (min-width: 640px) 224px, 185px"
-              className="h-[2.9375rem] w-auto sm:h-[3.5625rem] md:h-[4.125rem]"
+              className="mt-[9.8px] ml-[-1.1px] h-[2.9375rem] w-auto sm:mt-[11.2px] sm:ml-[-1.3px] sm:h-[3.5625rem] md:mt-[13.5px] md:ml-[-1.5px] md:h-[4.125rem]"
               priority
             />
           </Link>

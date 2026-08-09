@@ -29,7 +29,7 @@ export default function Home() {
               alt=""
               width={317}
               height={80}
-              className="-ml-1.5 h-12 w-auto translate-y-1 md:-ml-2 md:h-14 md:translate-y-[5px]"
+              className="-ml-1 h-[3.5rem] w-auto translate-y-1.5 md:-ml-1.5 md:h-16 md:translate-y-[7px]"
               priority
             />
           </Link>

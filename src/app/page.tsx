@@ -10,21 +10,21 @@ export default function Home() {
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 pb-20 pt-6 md:px-8 md:pt-8">
         <header className="flex items-center justify-between gap-4 anim-rise">
-          <Link href="/" className="flex items-center gap-2.5 no-underline">
+          <Link href="/" className="flex items-center gap-3 no-underline">
             <Image
               src="/brand/citeproof-icon-256.png"
               alt=""
-              width={28}
-              height={28}
-              className="rounded-[6px]"
+              width={48}
+              height={48}
+              className="h-11 w-11 rounded-[10px] md:h-12 md:w-12"
               priority
             />
             <Image
               src="/brand/citeproof-wordmark-header.png"
               alt="Citeproof"
-              width={140}
-              height={28}
-              className="h-6 w-auto md:h-7"
+              width={170}
+              height={36}
+              className="h-7 w-auto md:h-8"
               priority
             />
           </Link>

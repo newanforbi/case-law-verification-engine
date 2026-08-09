@@ -2,14 +2,32 @@ import { lookupCap } from "./cap";
 import { lookupCourtListener } from "./courtlistener";
 import { namesCompatible } from "./names";
 import { guessName, parseReporter, WL_RE } from "./reporters";
-import type { Consensus, LookupResult, SourceHit, VerifyResponse } from "./types";
+import { CONSENSUS_KINDS } from "./types";
+import type { Consensus, LookupResult, VerifyResponse } from "./types";
 
-export type { Consensus, LookupResult, SourceHit, VerifyResponse } from "./types";
+export { CONSENSUS_KINDS } from "./types";
+export type {
+  Consensus,
+  LookupResult,
+  SourceHit,
+  SourceOutcome,
+  VerifyResponse,
+} from "./types";
 
 export const CONTROLS = {
   positive: "Richardson v. McKnight, 521 U.S. 399 (1997)",
   negative: "In re Leman, 66 Cal.App.5th 200",
 } as const;
+
+export function tallyConsensus(
+  results: Array<Pick<LookupResult, "consensus">>,
+): Record<Consensus, number> {
+  const counts = Object.fromEntries(
+    CONSENSUS_KINDS.map((k) => [k, 0]),
+  ) as Record<Consensus, number>;
+  for (const r of results) counts[r.consensus] += 1;
+  return counts;
+}
 
 export const EXAMPLES = [
   CONTROLS.positive,
@@ -20,36 +38,60 @@ export const EXAMPLES = [
   "Swift v. California, 384 F.3d 1184",
 ] as const;
 
-function applyConsensus(result: LookupResult): Consensus {
-  const cl = result.sources.find((s) => s.source === "courtlistener");
-  const cap = result.sources.find((s) => s.source === "case.law_static");
-  const foundSources = [cl, cap].filter((s): s is SourceHit => Boolean(s?.found));
+/**
+ * Read the sources' outcomes into a verdict.
+ *
+ * The rule this deliberately does not follow is counting. Counting hits makes
+ * the verdict a function of how many corpora happen to overlap a citation
+ * rather than of what was actually established, which punishes recent
+ * authority — anything past the end of CAP's digitized run can only ever be
+ * half-confirmed — and, worse, turns "no source covers this" into the same
+ * answer as "a source that covers this says it does not exist".
+ *
+ * So a single source that carries the corpus is enough to confirm, PARTIAL is
+ * reserved for genuine disagreement between two sources that both cover the
+ * citation, and absence only counts when something was in a position to see it.
+ */
+export function applyConsensus(result: LookupResult): Consensus {
+  const found = result.sources.filter((s) => s.outcome === "FOUND");
+  const absent = result.sources.filter((s) => s.outcome === "ABSENT");
+  const unavailable = result.sources.filter((s) => s.outcome === "UNAVAILABLE");
 
-  if (!foundSources.length) {
-    result.consensus =
-      result.wlPin || result.reporterPin ? "NOT_FOUND" : "UNKNOWN";
-    return result.consensus;
-  }
+  if (found.length) {
+    const primary =
+      found.find(
+        (s) => s.caseName && namesCompatible(result.caseNameGuess, s.caseName),
+      ) ?? found[0];
+    result.matchedName = primary.caseName || "";
+    result.matchedCitations = primary.citations || [];
 
-  let primary = foundSources[0];
-  for (const s of foundSources) {
-    if (s.caseName && namesCompatible(result.caseNameGuess, s.caseName)) {
-      primary = s;
-      break;
+    const nameOk =
+      Boolean(primary.caseName) &&
+      namesCompatible(result.caseNameGuess, primary.caseName || "");
+    if (!nameOk && primary.caseName) {
+      result.consensus = "CAPTION_MISMATCH";
+      return result.consensus;
     }
-  }
-  result.matchedName = primary.caseName || "";
-  result.matchedCitations = primary.citations || [];
 
-  const nameOk =
-    Boolean(primary.caseName) &&
-    namesCompatible(result.caseNameGuess, primary.caseName || "");
-  if (!nameOk && primary.caseName) {
-    result.consensus = "CAPTION_MISMATCH";
+    // One source has it and another that carries the same corpus does not:
+    // that is a real conflict, and the only thing PARTIAL should mean.
+    result.consensus = absent.length ? "PARTIAL" : "FOUND";
     return result.consensus;
   }
 
-  result.consensus = foundSources.length >= 2 ? "FOUND" : "PARTIAL";
+  if (!result.reporterPin && !result.wlPin) {
+    result.consensus = "UNKNOWN";
+    return result.consensus;
+  }
+  if (absent.length) {
+    result.consensus = "NOT_FOUND";
+    return result.consensus;
+  }
+  if (unavailable.length) {
+    result.consensus = "UNCHECKED";
+    return result.consensus;
+  }
+  result.consensus = "OUT_OF_COVERAGE";
   return result.consensus;
 }
 
@@ -121,14 +163,7 @@ export async function verifyCitations(raw: string): Promise<VerifyResponse> {
     results.push(await lookupOne(cite));
   }
 
-  const counts: Record<Consensus, number> = {
-    FOUND: 0,
-    PARTIAL: 0,
-    CAPTION_MISMATCH: 0,
-    NOT_FOUND: 0,
-    UNKNOWN: 0,
-  };
-  for (const r of results) counts[r.consensus] += 1;
+  const counts = tallyConsensus(results);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -138,7 +173,7 @@ export async function verifyCitations(raw: string): Promise<VerifyResponse> {
         "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
       ],
       reference:
-        "Dual-source existence probe: CourtListener search + CAP static.case.law",
+        "Coverage-aware existence probe: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it.",
       controls: {
         positive: CONTROLS.positive,
         negative: CONTROLS.negative,

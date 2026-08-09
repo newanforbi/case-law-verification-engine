@@ -220,8 +220,18 @@ body {
   background: rgba(196, 92, 74, 0.1);
 }
 
+/* Not a finding about the citation — a finding about our reach. Kept visually
+   quiet so it never reads as an accusation the way NOT_FOUND does. */
+.status-OUT_OF_COVERAGE,
+.status-UNCHECKED,
 .status-UNKNOWN {
   color: var(--unknown);
   border-color: rgba(138, 133, 120, 0.45);
   background: rgba(138, 133, 120, 0.1);
+}
+
+.status-UNCHECKED {
+  color: var(--mismatch);
+  border-color: rgba(212, 160, 23, 0.35);
+  background: rgba(212, 160, 23, 0.08);
 }

@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "fixture:pdf": "node scripts/make-sample-pleading.mjs",
-    "test:unit": "tsx scripts/unit-check.ts && tsx scripts/citation-extract-check.ts && tsx scripts/consensus-check.ts && tsx scripts/quote-check.ts",
+    "test:unit": "tsx scripts/unit-check.ts && tsx scripts/citation-extract-check.ts && tsx scripts/consensus-check.ts && tsx scripts/quote-check.ts && tsx scripts/report-check.ts",
     "test:controls": "tsx scripts/controls-check.ts",
     "test:pdf": "npm run fixture:pdf && tsx scripts/pdf-verify-check.ts"
   },

@@ -30,16 +30,16 @@ export default function Home() {
         </header>
 
         <section className="relative mt-10 flex flex-1 flex-col justify-center pb-10 pt-4 md:mt-6 md:pb-16 md:pt-8">
-          <div className="pointer-events-none absolute -left-8 top-8 hidden h-[72%] w-[42%] md:block" aria-hidden>
+          <div className="no-print pointer-events-none absolute -left-8 top-8 hidden h-[72%] w-[42%] md:block" aria-hidden>
             <ReporterSilhouette />
           </div>
 
           <div className="relative max-w-3xl">
-            <div className="anim-rise line-pulse h-px w-24 bg-brass/70" />
-            <h1 className="anim-rise-delay-1 mt-6 max-w-xl font-[family-name:var(--font-fraunces)] text-2xl leading-snug text-parchment sm:text-3xl md:text-[2.15rem]">
+            <div className="no-print anim-rise line-pulse h-px w-24 bg-brass/70" />
+            <h1 className="no-print anim-rise-delay-1 mt-6 max-w-xl font-[family-name:var(--font-fraunces)] text-2xl leading-snug text-parchment sm:text-3xl md:text-[2.15rem]">
               Verify case law before the hallucination hits the filing.
             </h1>
-            <p className="anim-rise-delay-2 mt-4 max-w-lg text-base leading-relaxed text-parchment-dim md:text-lg">
+            <p className="no-print anim-rise-delay-2 mt-4 max-w-lg text-base leading-relaxed text-parchment-dim md:text-lg">
               Paste cites or upload a pleading PDF. We find the authorities,
               then probe CourtListener and CAP — the two sources that answer
               without a login.
@@ -53,7 +53,7 @@ export default function Home() {
 
         <section
           id="method"
-          className="mt-8 border-t border-[var(--line)] pt-14 md:mt-4 md:pt-16"
+          className="no-print mt-8 border-t border-[var(--line)] pt-14 md:mt-4 md:pt-16"
         >
           <div className="max-w-2xl">
             <h2 className="font-[family-name:var(--font-fraunces)] text-3xl text-parchment md:text-4xl">
@@ -117,7 +117,7 @@ export default function Home() {
           </p>
         </section>
 
-        <footer className="mt-20 border-t border-[var(--line)] pt-8 text-sm text-parchment-dim">
+        <footer className="no-print mt-20 border-t border-[var(--line)] pt-8 text-sm text-parchment-dim">
           <p>
             Citeproof · case-law verification engine · existence ≠ holding
           </p>

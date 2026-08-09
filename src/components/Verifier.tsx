@@ -9,6 +9,7 @@ import type {
   Support,
   VerifyResponse,
 } from "@/lib/verify";
+import { buildReport, reportFileName } from "@/lib/report/report";
 import {
   CONSENSUS_KINDS,
   CONTROLS,
@@ -229,13 +230,13 @@ export function Verifier() {
 
   return (
     <div className="w-full max-w-3xl">
-      <div className="mb-3 flex gap-1 border-b border-[var(--line)]">
+      <div className="no-print mb-3 flex gap-1 border-b border-[var(--line)]">
         <ModeTab active={mode === "paste"} onClick={() => setMode("paste")} label="Paste cites" />
         <ModeTab active={mode === "pdf"} onClick={() => setMode("pdf")} label="Upload PDF" />
       </div>
 
       {mode === "paste" ? (
-        <div className="textarea-shell rounded-sm border border-[var(--line)] bg-[rgba(11,20,16,0.55)] backdrop-blur-sm transition-shadow">
+        <div className="no-print textarea-shell rounded-sm border border-[var(--line)] bg-[rgba(11,20,16,0.55)] backdrop-blur-sm transition-shadow">
           <label htmlFor="citations" className="sr-only">
             Citations to verify
           </label>
@@ -257,7 +258,7 @@ export function Verifier() {
         </div>
       ) : (
         <div
-          className={`textarea-shell rounded-sm border border-dashed bg-[rgba(11,20,16,0.55)] backdrop-blur-sm transition-shadow ${
+          className={`no-print textarea-shell rounded-sm border border-dashed bg-[rgba(11,20,16,0.55)] backdrop-blur-sm transition-shadow ${
             dragOver ? "border-brass/70" : "border-[var(--line)]"
           }`}
           onDragOver={(e) => {
@@ -321,7 +322,7 @@ export function Verifier() {
       )}
 
       {mode === "paste" && (
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="no-print mt-4 flex flex-wrap gap-2">
           {EXAMPLES.slice(0, 4).map((ex) => (
             <button
               key={ex}
@@ -357,6 +358,7 @@ export function Verifier() {
 
       {data && (
         <section id="results" className="mt-10 scroll-mt-8" aria-live="polite">
+          <PrintHeader data={data} />
           {data.document && data.extraction && (
             <div className="mb-6 border border-[var(--line)] bg-ink-lift/70 px-4 py-4 md:px-5">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
@@ -426,8 +428,107 @@ export function Verifier() {
               ))}
             </ul>
           )}
+
+          {data.results.length > 0 && <ReportBar data={data} />}
         </section>
       )}
+    </div>
+  );
+}
+
+/**
+ * The report controls.
+ *
+ * JSON is the exact record — every outcome, coverage line and source URL, so a
+ * later reader can reconstruct what was known. Print is the filable form: the
+ * browser's own PDF export, which needs no server and no dependency, driven by
+ * the print stylesheet.
+ */
+function ReportBar({
+  data,
+}: {
+  data: PdfVerifyResponse;
+}) {
+  const report = buildReport(data, {
+    document: data.document
+      ? { fileName: data.document.fileName, pageCount: data.document.pageCount }
+      : undefined,
+  });
+
+  function download() {
+    const blob = new Blob([JSON.stringify(report, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = reportFileName(report);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="no-print mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] pt-4">
+      <p className="text-xs text-parchment-dim">
+        Report <span className="text-brass">{report.id}</span> · generated{" "}
+        {new Date(report.generatedAt).toLocaleString()} · {report.summary.citations}{" "}
+        authorit{report.summary.citations === 1 ? "y" : "ies"}
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={download}
+          className="rounded-sm border border-[var(--line)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-parchment-dim transition hover:border-brass hover:text-brass"
+        >
+          Download JSON
+        </button>
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="rounded-sm border border-[var(--line)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-parchment-dim transition hover:border-brass hover:text-brass"
+        >
+          Print / Save as PDF
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The record's header, which only exists on paper. On screen the page already
+ * says what this is; printed, the sheet has to stand on its own — when it was
+ * run, against what, by what method, and what the method could not reach.
+ */
+function PrintHeader({ data }: { data: PdfVerifyResponse }) {
+  const report = buildReport(data, {
+    document: data.document
+      ? { fileName: data.document.fileName, pageCount: data.document.pageCount }
+      : undefined,
+  });
+
+  return (
+    <div className="print-only">
+      <h1>Citation verification report</h1>
+      <p>
+        Report {report.id} · generated {new Date(report.generatedAt).toISOString()}
+        {report.document ? ` · ${report.document.fileName} (${report.document.pageCount} pp.)` : ""}
+      </p>
+      <p>
+        {report.summary.citations} authorit{report.summary.citations === 1 ? "y" : "ies"} checked ·{" "}
+        {CONSENSUS_KINDS.filter((k) => report.summary.existence[k] > 0)
+          .map((k) => `${report.summary.existence[k]} ${STATUS_LABEL[k].toLowerCase()}`)
+          .join(" · ")}
+      </p>
+      <p>Sources: {report.methodology.sources.join("; ")}</p>
+      <p>
+        Method controls: {report.methodology.controls.positive} (must resolve);{" "}
+        {report.methodology.controls.negative} (must not resolve)
+      </p>
+      <ul>
+        {report.caveats.map((c, i) => (
+          <li key={i}>{c}</li>
+        ))}
+      </ul>
     </div>
   );
 }

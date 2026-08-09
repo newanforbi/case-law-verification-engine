@@ -1,0 +1,99 @@
+import assert from "node:assert/strict";
+import { buildReport, reportFileName } from "../src/lib/report/report";
+import type { Consensus, LookupResult, Support, VerifyResponse } from "../src/lib/verify/types";
+
+function result(
+  citation: string,
+  existence: Consensus,
+  support: Support = "NO_QUOTE",
+): LookupResult {
+  return {
+    query: citation,
+    caseNameGuess: citation.split(",")[0],
+    reporterPin: "521 U.S. 399",
+    wlPin: null,
+    sources: [
+      {
+        source: "courtlistener",
+        outcome: existence === "FOUND" ? "FOUND" : "ABSENT",
+        found: existence === "FOUND",
+        coverage: "CourtListener carries U.S.",
+        url: "https://www.courtlistener.com/opinion/1/x/",
+      },
+    ],
+    consensus: existence,
+    matchedName: existence === "FOUND" ? citation.split(",")[0] : "",
+    matchedCitations: [],
+    support: { verdict: support, quotes: [], pin: null },
+  };
+}
+
+function response(results: LookupResult[]): VerifyResponse {
+  return {
+    generatedAt: "2026-08-09T23:30:00.000Z",
+    methodology: {
+      sources: ["CourtListener", "CAP"],
+      reference: "test",
+      controls: { positive: "p", negative: "n" },
+    },
+    resultCount: results.length,
+    counts: {} as VerifyResponse["counts"],
+    results,
+  };
+}
+
+const report = buildReport(
+  response([
+    result("Richardson v. McKnight, 521 U.S. 399 (1997)", "FOUND", "SUPPORTED"),
+    result("In re Leman, 66 Cal.App.5th 200", "NOT_FOUND"),
+    result("Burrell v. Jackson, 2003 WL 23545858", "OUT_OF_COVERAGE"),
+    result("Doe v. Roe, 1 U.S. 1", "UNCHECKED"),
+  ]),
+);
+
+assert.equal(report.summary.citations, 4);
+assert.equal(report.summary.existence.FOUND, 1);
+assert.equal(report.summary.existence.NOT_FOUND, 1);
+assert.equal(report.summary.existence.OUT_OF_COVERAGE, 1);
+assert.equal(report.summary.existence.UNCHECKED, 1);
+assert.equal(report.summary.support.SUPPORTED, 1);
+
+// Every verdict is present in the tally, including the zeroes, so a reader
+// cannot mistake an absent key for a count of none.
+assert.equal(Object.keys(report.summary.existence).length, 7);
+assert.equal(Object.keys(report.summary.support).length, 6);
+
+// The artifact carries its own limits, and they are specific to this run.
+assert.match(report.caveats[0], /not holdings/i);
+assert.ok(report.caveats.some((c) => /not checked at all/i.test(c)));
+assert.ok(report.caveats.some((c) => /outside both free sources/i.test(c)));
+
+// A clean run says the standing caveat and nothing alarming.
+const clean = buildReport(
+  response([result("Richardson v. McKnight, 521 U.S. 399 (1997)", "FOUND", "SUPPORTED")]),
+);
+assert.equal(clean.caveats.length, 1);
+
+// Unsupplied quotes must be stated, not silently passed over.
+const noQuotes = buildReport(
+  response([result("Richardson v. McKnight, 521 U.S. 399 (1997)", "FOUND")]),
+);
+assert.ok(noQuotes.caveats.some((c) => /No quoted language was supplied/i.test(c)));
+
+// The id is a handle: same content, same id; changed verdict, changed id.
+const same = buildReport(
+  response([result("Richardson v. McKnight, 521 U.S. 399 (1997)", "FOUND", "SUPPORTED")]),
+);
+assert.equal(clean.id, same.id);
+const changed = buildReport(
+  response([result("Richardson v. McKnight, 521 U.S. 399 (1997)", "NOT_FOUND", "SUPPORTED")]),
+);
+assert.notEqual(clean.id, changed.id);
+
+assert.match(reportFileName(clean), /^citeproof-citations-2026-08-09-[0-9a-f]{8}\.json$/);
+assert.match(
+  reportFileName(buildReport(response([]), { document: { fileName: "Motion to Dismiss.pdf", pageCount: 12 } })),
+  /^citeproof-Motion-to-Dismiss-2026-08-09-[0-9a-f]{8}\.json$/,
+);
+
+console.log("OK report tests passed");

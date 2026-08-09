@@ -15,21 +15,21 @@ export default function Home() {
             className="flex items-end no-underline"
             aria-label="Citeproof"
           >
-            {/* Logo C stands in for the letter C — same baseline as iteproof */}
+            {/* Logo C = capital C; iteproof shares the baseline like one word */}
             <Image
               src="/brand/citeproof-icon-256.png"
               alt=""
               width={80}
               height={80}
-              className="h-[3.25rem] w-[3.25rem] shrink-0 md:h-[3.75rem] md:w-[3.75rem]"
+              className="h-14 w-14 shrink-0 md:h-16 md:w-16"
               priority
             />
             <Image
               src="/brand/citeproof-wordmark-iteproof-header-lg.png"
               alt=""
-              width={188}
-              height={48}
-              className="-ml-2 mb-1 h-9 w-auto md:-ml-2.5 md:mb-1.5 md:h-11"
+              width={254}
+              height={64}
+              className="-ml-2.5 h-11 w-auto md:-ml-3 md:h-[3.25rem]"
               priority
             />
           </Link>

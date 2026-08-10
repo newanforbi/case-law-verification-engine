@@ -182,7 +182,7 @@ export async function POST(request: Request) {
           "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
         ],
         reference:
-          "Filing extract (PDF or Word .docx) + citation pairing, then coverage-aware existence probe and quote checking via CourtListener + CAP static.case.law. We check what the opinion says, not whether it supports the argument.",
+          "Filing extract (PDF or Word .docx) + citation pairing, then coverage-aware existence probe and quote checking via CourtListener + CAP static.case.law. We check what the opinion says, not whether it supports the argument. Constructed public links (Justia / LOC / Scholar) are references only and never affect the verdict.",
         controls: {
           positive: CONTROLS.positive,
           negative: CONTROLS.negative,

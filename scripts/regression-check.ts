@@ -161,7 +161,7 @@ async function main() {
 
   const word = reportToWordHtml(report);
   assert.match(word, /Citation verification report/);
-  assert.match(word, /method 2026\.08\.1/);
+  assert.match(word, new RegExp(`method ${METHOD_VERSION.replace(/\./g, "\\.")}`));
   assert.match(word, /Richardson/);
   assert.match(reportWordFileName(report), /\.doc$/);
 

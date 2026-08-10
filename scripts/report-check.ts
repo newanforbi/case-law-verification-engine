@@ -109,11 +109,14 @@ assert.match(report.caveats[0], /what the opinion says/i);
 assert.ok(report.caveats.some((c) => /not checked at all/i.test(c)));
 assert.ok(report.caveats.some((c) => /outside both free sources/i.test(c)));
 
-// A clean run says the standing caveat and nothing alarming.
+// A clean run says the standing caveats and nothing alarming.
 const clean = buildReport(
   response([result("Richardson v. McKnight, 521 U.S. 399 (1997)", "FOUND", "SUPPORTED")]),
 );
-assert.equal(clean.caveats.length, 1);
+assert.equal(clean.caveats.length, 2);
+assert.ok(clean.caveats.some((c) => /what the opinion says/i.test(c)));
+assert.ok(clean.caveats.some((c) => /references only/i.test(c)));
+assert.equal(clean.records[0]?.links?.length ?? 0, 0); // fixture has no links attached
 
 // Failed controls add a caveat.
 const failedControls = buildReport({

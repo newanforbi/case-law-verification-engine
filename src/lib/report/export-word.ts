@@ -37,13 +37,18 @@ export function reportToWordHtml(report: VerificationReport): string {
       const quotes = r.quotes.length
         ? r.quotes.map((q) => `${q.match}: “${esc(q.passage)}”`).join("<br/>")
         : "—";
+      const links = (r.links ?? [])
+        .map((l) => `${esc(l.label)} (${l.kind}): ${esc(l.url)}`)
+        .join("<br/>");
+      const meta = [r.courtLabel, r.decisionYear].filter(Boolean).join(" · ");
       return `<tr>
-  <td>${esc(r.citation)}</td>
+  <td>${esc(r.citation)}${meta ? `<br/><span style="color:#555">${esc(meta)}</span>` : ""}</td>
   <td>${esc(r.existence)}</td>
   <td>${esc(r.support)}</td>
   <td>${esc(r.matchedCaption || "—")}</td>
   <td>${esc(sources || "—")}</td>
   <td>${quotes}</td>
+  <td>${links || "—"}</td>
   <td>${esc(r.checkedAt || "—")}</td>
 </tr>`;
     })
@@ -108,11 +113,12 @@ export function reportToWordHtml(report: VerificationReport): string {
         <th>Matched caption</th>
         <th>Sources</th>
         <th>Quotes</th>
+        <th>Open links</th>
         <th>Checked at</th>
       </tr>
     </thead>
     <tbody>
-${rows || `<tr><td colspan="7">No authorities in this report.</td></tr>`}
+${rows || `<tr><td colspan="8">No authorities in this report.</td></tr>`}
     </tbody>
   </table>
 

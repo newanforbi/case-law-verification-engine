@@ -1,5 +1,6 @@
 import { lookupCap } from "./cap";
 import { lookupCourtListener } from "./courtlistener";
+import { enrichLookupMetadata } from "./links";
 import { namesCompatible } from "./names";
 import { fetchOpinionText } from "./opinion";
 import {
@@ -30,12 +31,19 @@ export type {
   PinFinding,
   QuoteFinding,
   QuoteMatch,
+  ReferenceLink,
   SourceHit,
   SourceOutcome,
   Support,
   SupportReport,
   VerifyResponse,
 } from "./types";
+export {
+  buildReferenceLinks,
+  constructedReferenceLinks,
+  courtLabelForPin,
+  parseDecisionYear,
+} from "./links";
 
 export const CONTROLS = {
   positive: "Richardson v. McKnight, 521 U.S. 399 (1997)",
@@ -207,7 +215,7 @@ function methodologyBlock(): VerifyResponse["methodology"] {
       "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
     ],
     reference:
-      "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument.",
+      "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument. Open links marked primary come from those voting sources (or retrieved opinion text); constructed Justia / LOC / Scholar links are references only and never affect the verdict.",
     controls: {
       positive: CONTROLS.positive,
       negative: CONTROLS.negative,
@@ -257,7 +265,7 @@ export async function lookupOneSafe(
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     const rep = parseReporter(citation);
-    return {
+    return enrichLookupMetadata({
       query: citation,
       caseNameGuess: guessName(citation),
       reporterPin: rep?.pin ?? null,
@@ -269,7 +277,7 @@ export async function lookupOneSafe(
       support: { verdict: "UNCHECKED", quotes: [], pin: null },
       checkedAt: new Date().toISOString(),
       error: `Lookup failed for this citation: ${reason}`,
-    };
+    });
   }
 }
 
@@ -301,7 +309,7 @@ export async function lookupOne(
   applyConsensus(result);
   result.support = await evaluateSupport(citation, result, passages);
   result.checkedAt = new Date().toISOString();
-  return result;
+  return enrichLookupMetadata(result);
 }
 
 export function parseCitationInput(raw: string): string[] {

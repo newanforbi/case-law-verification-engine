@@ -87,16 +87,38 @@ async function ocrFromScreenshots(
     CanvasFactory: CanvasFactory as never,
   });
   try {
-    const shots = await parser.getScreenshot({
-      first: limit,
-      scale: 2,
-      imageBuffer: true,
-      imageDataUrl: false,
+    let shots: Awaited<ReturnType<InstanceType<typeof PDFParse>["getScreenshot"]>>;
+    try {
+      shots = await parser.getScreenshot({
+        first: limit,
+        scale: 2,
+        imageBuffer: true,
+        imageDataUrl: false,
+      });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(`Could not render PDF pages for OCR (${reason}).`);
+    }
+
+    const pngPages = (shots.pages || []).map((p) => {
+      const png = p.data;
+      if (!png || typeof (png as Uint8Array).byteLength !== "number") {
+        throw new Error(
+          `Screenshot for page ${p.pageNumber} did not include image bytes.`,
+        );
+      }
+      // Copy now — pdf.js may recycle the underlying buffer.
+      const copy = Buffer.from(png);
+      if (copy.byteLength < 32) {
+        throw new Error(
+          `Screenshot for page ${p.pageNumber} was empty (${copy.byteLength} bytes).`,
+        );
+      }
+      return { page: p.pageNumber, png: copy };
     });
-    const pngPages = (shots.pages || []).map((p) => ({
-      page: p.pageNumber,
-      png: p.data as Uint8Array,
-    }));
+    if (!pngPages.length) {
+      throw new Error("PDF screenshot produced no pages to OCR.");
+    }
     const ocrPages = await ocrPngPages(pngPages);
     return {
       pages: ocrPages.map((p) => ({ page: p.page, text: p.text })),
@@ -173,8 +195,10 @@ export async function extractPdfText(
     return finalize(fileName, pageCount || pages.length, pages, "ocr", meta);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
+    // Avoid "OCR failed (OCR failed on page…)" doubling from inner throws.
+    const detail = /OCR failed/i.test(reason) ? reason : `OCR failed (${reason})`;
     throw new Error(
-      `This PDF has little or no extractable text, and OCR failed (${reason}). Try a text-based export, or paste the citations.`,
+      `This PDF has little or no extractable text, and ${detail}. Try a text-based export, or paste the citations.`,
     );
   }
 }

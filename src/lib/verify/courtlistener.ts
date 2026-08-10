@@ -110,11 +110,13 @@ export async function lookupCourtListener(
           httpStatus: 200,
         };
         if ((citeMatch || wlMatch) && nameMatch) return hit;
+        // Prefer a pin match over a name-only fallback. Notes use JS booleans
+        // (`false`), so older checks for `False` never fired and ranking was dead.
         if (
           !best ||
           ((citeMatch || wlMatch) &&
-            (best.notes || "").includes("cite_match=False") &&
-            (best.notes || "").includes("wl_match=False"))
+            (best.notes || "").includes("cite_match=false") &&
+            (best.notes || "").includes("wl_match=false"))
         ) {
           best = hit;
         }

@@ -95,12 +95,27 @@ export function namesCompatible(a: string, b: string): boolean {
     const ob = orderedSide(b, "right", NOISE);
     if (oa.length && ob.length) {
       if (oa.join(" ") === ob.join(" ")) return true;
-      if (oa.length >= 2 && oa.length <= ob.length && oa.join(" ") === ob.slice(0, oa.length).join(" ")) {
-        return true;
-      }
-      if (ob.length >= 2 && ob.length <= oa.length && ob.join(" ") === oa.slice(0, ob.length).join(" ")) {
-        return true;
-      }
+      // Multi-token prefixes are safe ("Dry Creek" ⊂ "Dry Creek Joint …").
+      // A one-token prefix is only safe for org-type words that pleadings wrap
+      // ("County" ⊂ "County of Santa Clara") — not surnames ("Morgan" ⊄ "Morgan Hill").
+      const ORG = new Set([
+        "county",
+        "city",
+        "state",
+        "township",
+        "parish",
+        "borough",
+        "district",
+        "department",
+        "board",
+        "commission",
+      ]);
+      const prefixOk = (short: string[], long: string[]) => {
+        if (!short.length || short.length > long.length) return false;
+        if (short.join(" ") !== long.slice(0, short.length).join(" ")) return false;
+        return short.length >= 2 || ORG.has(short[0]!);
+      };
+      if (prefixOk(oa, ob) || prefixOk(ob, oa)) return true;
       const overlap = [...ra].filter((t) => rb.has(t));
       return overlap.length >= 2;
     }

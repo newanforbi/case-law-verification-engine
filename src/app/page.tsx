@@ -37,12 +37,12 @@ export default function Home() {
           <div className="relative max-w-3xl">
             <div className="no-print anim-rise line-pulse h-px w-24 bg-brass/70" />
             <h1 className="no-print anim-rise-delay-1 mt-6 max-w-xl font-[family-name:var(--font-fraunces)] text-2xl leading-snug text-parchment sm:text-3xl md:text-[2.15rem]">
-              Verify case law before the hallucination hits the filing.
+              A pre-filing citation audit — not a lookup box.
             </h1>
             <p className="no-print anim-rise-delay-2 mt-4 max-w-lg text-base leading-relaxed text-parchment-dim md:text-lg">
-              Upload a filing, or paste cites. We find the authorities, then
-              probe CourtListener and CAP — the two sources that answer without
-              a login.
+              Upload the filing. We identify the authorities, check existence
+              and quoted language against CourtListener and CAP, and hand back
+              a timestamped record you can keep.
             </p>
           </div>
 
@@ -60,27 +60,27 @@ export default function Home() {
               How verification works
             </h2>
             <p className="mt-3 text-base leading-relaxed text-parchment-dim">
-              Existence first. Caption match second. Holding characterization
-              is still a human read of the opinion — this engine stops
-              fabricated pins from walking into court.
+              Existence and caption first. Then, where the filing quotes an
+              opinion, we check what the opinion says — not whether it supports
+              the argument. The deliverable is a record, not a vanishing screen.
             </p>
           </div>
 
           <ol className="mt-10 grid gap-8 md:grid-cols-3 md:gap-10">
             <Step
               n="01"
-              title="Extract & identify"
-              body="From paste or a PDF text layer, pair case names to reporter/Westlaw pins."
+              title="Extract the filing"
+              body="From the PDF text layer (or a paste), pair case names to reporter/Westlaw pins and harvest nearby quotes."
             />
             <Step
               n="02"
-              title="Probe both sources"
-              body="CourtListener opinion search and CAP CasesMetadata.json on static.case.law run in parallel."
+              title="Coverage-aware probe"
+              body="CourtListener and CAP run in parallel. One source that covers the citation is enough; gaps in a corpus are not counted as absence."
             />
             <Step
               n="03"
-              title="Consensus"
-              body="FOUND when both hit with a compatible caption; CAPTION_MISMATCH when the pin belongs to a different case; NOT_FOUND when neither resolves."
+              title="Quote check + record"
+              body="Quoted language and pin pages are checked against the opinion text. Export a timestamped JSON report with sources, URLs, and the control pair."
             />
           </ol>
         </section>
@@ -119,7 +119,8 @@ export default function Home() {
 
         <footer className="no-print mt-20 border-t border-[var(--line)] pt-8 text-sm text-parchment-dim">
           <p>
-            Citeproof · case-law verification engine · existence ≠ holding
+            Citeproof · pre-filing citation audit · we check what the opinion
+            says, not whether it supports your argument
           </p>
         </footer>
       </div>

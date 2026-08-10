@@ -7,7 +7,7 @@ export interface PdfPageText {
   text: string;
 }
 
-export type PdfTextSource = "text_layer" | "ocr";
+export type PdfTextSource = "text_layer" | "ocr" | "docx";
 
 export interface PdfExtraction {
   fileName: string;

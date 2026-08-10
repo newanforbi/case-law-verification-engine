@@ -5,7 +5,7 @@ A web engine that audits case-law citations in a filing against the two sources 
 1. **CourtListener** — `GET /api/rest/v4/search/`
 2. **Caselaw Access Project** — `static.case.law/{reporter}/{volume}/CasesMetadata.json`
 
-Upload a pleading PDF (default) or paste cites. Citeproof extracts authorities, probes existence with **coverage-aware** verdicts, checks quoted language and pin pages against opinion text where available, and exports a **timestamped verification report**.
+Upload a pleading (**Word .docx** or PDF) or paste cites. Citeproof extracts authorities, probes existence with **coverage-aware** verdicts, checks quoted language and pin pages against opinion text where available, and exports a **timestamped verification report**.
 
 We check what the opinion says, not whether it supports your argument.
 
@@ -75,8 +75,9 @@ curl -s -X POST http://localhost:3000/api/verify-pdf \
 ```
 
 ```bash
-npm run test:unit          # parser + consensus + quotes + report + regression pack
+npm run test:unit          # parser + consensus + quotes + report + regression + docx
 npm run test:ocr           # image-only PDF → tesseract OCR → citation extract
+npm run test:docx          # sample pleading .docx → extract → citation queue
 npm run test:controls      # live Richardson(+) / Leman(−)
 npm run test:pdf           # sample pleading PDF → extract → verify controls
 npm run test:smoke         # POST fixture PDF to /api/verify-pdf (needs a running server)
@@ -86,11 +87,13 @@ npm run build
 Reports carry `methodVersion`, per-source `checkedAt`, structured coverage envelopes,
 live control-pair results, and can be downloaded as JSON or Word-compatible `.doc`.
 
-Scanned / image-only PDFs are OCR'd automatically (pdf-parse screenshots → tesseract.js),
-up to 12 pages per upload. Text-layer PDFs skip OCR. PACER/ECF filings that only have a
-selectable page stamp (with a scanned body) are treated as image-only and OCR'd.
+**Word (.docx)** filings use mammoth text extract (no OCR). Scanned / image-only PDFs are
+OCR'd automatically (pdf-parse screenshots → tesseract.js), up to 12 pages per upload.
+Text-layer PDFs skip OCR. PACER/ECF filings that only have a selectable page stamp (with a
+scanned body) are treated as image-only and OCR'd. Legacy binary `.doc` is not supported —
+save as `.docx` or PDF.
 
-PDF size: up to **40 MB**. Files ≤ 4 MB post as multipart; larger files upload to
+Filing size: up to **40 MB**. Files ≤ 4 MB post as multipart; larger files upload to
 **Vercel Blob** (`/api/pdf/upload`) then `/api/verify-pdf` fetches by `blobUrl`.
 Requires a Blob store connected to the project (`BLOB_READ_WRITE_TOKEN`).
 
@@ -109,8 +112,8 @@ Notes for a clean deploy:
 
 - **Node 20+** (`engines` in `package.json`)
 - **Fluid compute** should stay enabled (Hobby max duration is 300s with Fluid)
-- **PDF uploads capped at 40 MB** — files over ~4 MB use Vercel Blob (create a
-  Blob store in the project; token is injected as `BLOB_READ_WRITE_TOKEN`)
+- **Filing uploads capped at 40 MB** (PDF / .docx) — files over ~4 MB use Vercel
+  Blob (create a Blob store in the project; token is injected as `BLOB_READ_WRITE_TOKEN`)
 - **OCR** needs network egress to fetch tesseract language data on cold start
   (cached under `/tmp` afterward)
 - No secrets required; CourtListener search + CAP `static.case.law` are unauthenticated

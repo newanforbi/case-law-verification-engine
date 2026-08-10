@@ -143,6 +143,8 @@ npm run build
 
 Reports carry `methodVersion`, per-source `checkedAt`, structured coverage envelopes,
 live control-pair results, and can be downloaded as JSON or Word-compatible `.doc`.
+**Print** and **Download audit (Word)** export a compact Citation Audit Report
+(cite + verified status); **Download full (Word)** / JSON keep the complete record.
 
 **Word (.docx)** filings use mammoth text extract (no OCR). Scanned / image-only PDFs are
 OCR'd automatically (pdf-parse screenshots → tesseract.js), up to 12 pages per upload.

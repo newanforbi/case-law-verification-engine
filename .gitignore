@@ -27,6 +27,7 @@
 # OCR fixture intermediates (committed artifact is scanned-pleading.pdf)
 /fixtures/scanned-pleading.png
 /fixtures/scanned-pleading.rgb
+*.traineddata
 
 # debug
 npm-debug.log*

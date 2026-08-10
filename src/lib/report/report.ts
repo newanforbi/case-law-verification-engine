@@ -101,7 +101,7 @@ function toRecord(r: LookupResult): ReportRecord {
  */
 function caveatsFor(records: ReportRecord[]): string[] {
   const out: string[] = [
-    "Existence and caption are not holdings. A case can be real, correctly cited, and still not support the proposition it is cited for.",
+    "We check what the opinion says, not whether it supports the argument. A case can be real, correctly quoted, and still not carry the weight the filing places on it.",
   ];
 
   const count = (fn: (r: ReportRecord) => boolean) => records.filter(fn).length;

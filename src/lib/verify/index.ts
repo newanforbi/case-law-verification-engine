@@ -114,8 +114,17 @@ export function applyConsensus(result: LookupResult): Consensus {
 async function evaluateSupport(
   citation: string,
   result: LookupResult,
+  extraPassages: string[] = [],
 ): Promise<SupportReport> {
-  const passages = extractQuotedPassages(citation);
+  const fromCite = extractQuotedPassages(citation);
+  const seen = new Set(fromCite.map((p) => p.toLowerCase()));
+  const passages = [...fromCite];
+  for (const p of extraPassages) {
+    const key = p.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    passages.push(p.trim());
+  }
   const rep = parseReporter(citation);
   const pinCite = rep ? parsePinCite(citation, rep.page) : null;
 
@@ -175,9 +184,18 @@ async function evaluateSupport(
  * the caller every other answer in the batch. The failure is reported as
  * UNCHECKED, which is what it is: nothing was established about this citation.
  */
-export async function lookupOneSafe(citation: string): Promise<LookupResult> {
+export interface VerifyRequestItem {
+  citation: string;
+  /** Quoted passages from the filing to check against the opinion. */
+  passages?: string[];
+}
+
+export async function lookupOneSafe(
+  citation: string,
+  passages: string[] = [],
+): Promise<LookupResult> {
   try {
-    return await lookupOne(citation);
+    return await lookupOne(citation, passages);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     const rep = parseReporter(citation);
@@ -196,7 +214,10 @@ export async function lookupOneSafe(citation: string): Promise<LookupResult> {
   }
 }
 
-export async function lookupOne(citation: string): Promise<LookupResult> {
+export async function lookupOne(
+  citation: string,
+  passages: string[] = [],
+): Promise<LookupResult> {
   const name = guessName(citation);
   const rep = parseReporter(citation);
   const wlM = citation.match(WL_RE);
@@ -219,7 +240,7 @@ export async function lookupOne(citation: string): Promise<LookupResult> {
   ]);
   result.sources.push(cl, cap);
   applyConsensus(result);
-  result.support = await evaluateSupport(citation, result);
+  result.support = await evaluateSupport(citation, result, passages);
   return result;
 }
 
@@ -252,18 +273,25 @@ export function parseCitationInput(raw: string): string[] {
   return out;
 }
 
-export async function verifyCitations(raw: string): Promise<VerifyResponse> {
-  const cites = parseCitationInput(raw);
-  if (!cites.length) {
+export async function verifyCitationItems(
+  items: VerifyRequestItem[],
+): Promise<VerifyResponse> {
+  if (!items.length) {
     throw new Error("Provide at least one citation to verify.");
   }
-  if (cites.length > 25) {
+  if (items.length > 25) {
     throw new Error("Verify at most 25 citations per request.");
   }
 
   const results: LookupResult[] = [];
-  for (const cite of cites) {
-    results.push(await lookupOneSafe(cite));
+  for (const item of items) {
+    const citation = item.citation.trim();
+    if (!citation) continue;
+    results.push(await lookupOneSafe(citation, item.passages ?? []));
+  }
+
+  if (!results.length) {
+    throw new Error("Provide at least one citation to verify.");
   }
 
   const counts = tallyConsensus(results);
@@ -276,7 +304,7 @@ export async function verifyCitations(raw: string): Promise<VerifyResponse> {
         "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
       ],
       reference:
-        "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it, and quoted language is checked against the opinion's own text where that text can be retrieved.",
+        "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument.",
       controls: {
         positive: CONTROLS.positive,
         negative: CONTROLS.negative,
@@ -286,4 +314,9 @@ export async function verifyCitations(raw: string): Promise<VerifyResponse> {
     counts,
     results,
   };
+}
+
+export async function verifyCitations(raw: string): Promise<VerifyResponse> {
+  const cites = parseCitationInput(raw);
+  return verifyCitationItems(cites.map((citation) => ({ citation })));
 }

@@ -1,34 +1,43 @@
-# Citeproof — Case Law Verification Engine
+# Citeproof — Pre-Filing Citation Audit
 
-A web engine that verifies case-law citations against the two sources proven reachable without auth:
+A web engine that audits case-law citations in a filing against the two sources proven reachable without auth:
 
 1. **CourtListener** — `GET /api/rest/v4/search/`
 2. **Caselaw Access Project** — `static.case.law/{reporter}/{volume}/CasesMetadata.json`
 
-## Why
+Upload a pleading PDF (default) or paste cites. Citeproof extracts authorities, probes existence with **coverage-aware** verdicts, checks quoted language and pin pages against opinion text where available, and exports a **timestamped verification report**.
 
-AI drafting invents pins. Citeproof checks whether a citation **exists** and whether the **caption matches** the reporter/Westlaw pin before it lands in a filing.
+We check what the opinion says, not whether it supports your argument.
 
-**Paste cites** or **upload a pleading PDF**. The PDF path extracts the text layer, pairs case names to reporter/Westlaw pins, then runs the dual-source existence probe.
-
-Existence ≠ holding. Characterization still needs opinion text. Scanned image-only PDFs need OCR first (no text layer → clear error).
-
-## Consensus statuses
+## Existence verdicts
 
 | Status | Meaning |
 |---|---|
-| `FOUND` | CourtListener + CAP both resolve; caption compatible |
-| `PARTIAL` | One working source resolves (common for WL-only pins) |
+| `FOUND` | A source that covers this citation resolved the pin; caption compatible |
+| `PARTIAL` | One covering source resolved the pin; another that also covers it did not |
 | `CAPTION_MISMATCH` | Pin resolves to a different case — miscitation signal |
-| `NOT_FOUND` | Neither source resolves the pin |
-| `UNKNOWN` | Unclassifiable input |
+| `NOT_FOUND` | A covering source looked and does not have it — fabrication signal |
+| `OUT_OF_COVERAGE` | Neither free source covers this citation (e.g. unpublished WL-only) |
+| `UNCHECKED` | A source was unreachable; nothing was established |
+| `UNKNOWN` | No reporter or Westlaw pin could be parsed |
+
+## Quote / support verdicts
+
+| Status | Meaning |
+|---|---|
+| `SUPPORTED` | Quoted language (and pin, when checkable) matches the opinion |
+| `QUALIFIED` | Match after ellipses/brackets, or pin page not marked in the text |
+| `UNSUPPORTED` | Passage not found in the opinion |
+| `INDETERMINATE` | Quote too short to judge |
+| `NO_QUOTE` | No quoted language supplied |
+| `UNCHECKED` | Opinion text could not be retrieved |
 
 ## Method controls
 
 | Control | Expectation |
 |---|---|
-| *Richardson v. McKnight*, 521 U.S. 399 (1997) | Must resolve |
-| *In re Leman*, 66 Cal.App.5th 200 | Must **not** resolve |
+| *Richardson v. McKnight*, 521 U.S. 399 (1997) | Must resolve (`FOUND`) |
+| *In re Leman*, 66 Cal.App.5th 200 | Must **not** resolve (`NOT_FOUND`) |
 
 ## Sources intentionally excluded
 
@@ -46,22 +55,27 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Use **Paste cites** or **Upload PDF**.
+Open [http://localhost:3000](http://localhost:3000). **Upload a filing** is the front door; paste is available as a tab.
 
 ```bash
-# paste API
+# paste / batch API
 curl -s -X POST http://localhost:3000/api/verify \
   -H 'content-type: application/json' \
   -d '{"citations":"Richardson v. McKnight, 521 U.S. 399 (1997)\nIn re Leman, 66 Cal.App.5th 200"}'
 
-# PDF API
+# items with harvested quotes
+curl -s -X POST http://localhost:3000/api/verify \
+  -H 'content-type: application/json' \
+  -d '{"items":[{"citation":"Richardson v. McKnight, 521 U.S. 399, 402 (1997)","passages":["private prison guards"]}]}'
+
+# PDF extract only (what the UI does first)
 npm run fixture:pdf
 curl -s -X POST http://localhost:3000/api/verify-pdf \
-  -F file=@fixtures/sample-pleading.pdf
+  -F file=@fixtures/sample-pleading.pdf -F verify=false
 ```
 
 ```bash
-npm run test:unit          # parser + caption matching + citation extract
+npm run test:unit          # parser + consensus + quotes + report + extract
 npm run test:controls      # live Richardson(+) / Leman(−)
 npm run test:pdf           # sample pleading PDF → extract → verify controls
 npm run build
@@ -91,4 +105,4 @@ npx vercel --prod     # production
 
 ## Stack
 
-Next.js (App Router) + TypeScript + `pdf-parse`. Verification core in `src/lib/verify/`; citation pairing in `src/lib/citations/`. UI brand: **Citeproof**.
+Next.js (App Router) + TypeScript + `pdf-parse`. Verification core in `src/lib/verify/`; citation pairing in `src/lib/citations/`; report artifact in `src/lib/report/`. UI brand: **Citeproof**.

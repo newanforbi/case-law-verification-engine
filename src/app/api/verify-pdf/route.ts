@@ -8,6 +8,7 @@ import {
   type LookupResult,
   type VerifyResponse,
 } from "@/lib/verify";
+import type { VerifyItem } from "@/lib/citations/extract";
 import {
   MAX_PDF_BYTES,
   MAX_PDF_LABEL,
@@ -84,10 +85,11 @@ export async function POST(request: Request) {
       verifyLimit: limit,
     });
 
+    const verifyItems: VerifyItem[] = cites.verifyItems;
     const results: LookupResult[] = [];
-    if (verifyFlag && cites.verifyQueue.length) {
-      for (const citation of cites.verifyQueue) {
-        results.push(await lookupOneSafe(citation));
+    if (verifyFlag && verifyItems.length) {
+      for (const item of verifyItems) {
+        results.push(await lookupOneSafe(item.citation, item.passages));
       }
     }
 
@@ -106,12 +108,12 @@ export async function POST(request: Request) {
           "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
         ],
         reference:
-          "PDF extract + citation pairing, then coverage-aware existence probe via CourtListener + CAP static.case.law",
+          "PDF extract + citation pairing, then coverage-aware existence probe and quote checking via CourtListener + CAP static.case.law. We check what the opinion says, not whether it supports the argument.",
         // The report renders these, and this route used to omit them.
         controls: { positive: CONTROLS.positive, negative: CONTROLS.negative },
       } satisfies VerifyResponse["methodology"],
       extractionMethod:
-        "pdf-parse text layer → reporter/Westlaw + case-name pairing → coverage-aware verify",
+        "pdf-parse text layer → reporter/Westlaw + case-name pairing → quote harvest → coverage-aware verify",
       document: {
         fileName: extracted.fileName,
         pageCount: extracted.pageCount,
@@ -122,6 +124,7 @@ export async function POST(request: Request) {
         totalMatches: cites.citations.length,
         countsByKind: cites.countsByKind,
         verifyQueue: cites.verifyQueue,
+        verifyItems,
         verifyQueueCount: cites.verifyQueue.length,
         occurrences: interesting.slice(0, 200).map((c) => ({
           kind: c.kind,

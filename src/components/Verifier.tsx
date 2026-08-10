@@ -29,6 +29,11 @@ interface PdfOccurrence {
   context: string;
 }
 
+interface VerifyItemPayload {
+  citation: string;
+  passages?: string[];
+}
+
 interface PdfVerifyResponse extends VerifyResponse {
   document?: {
     fileName: string;
@@ -40,6 +45,7 @@ interface PdfVerifyResponse extends VerifyResponse {
     totalMatches: number;
     countsByKind: Record<string, number>;
     verifyQueue: string[];
+    verifyItems?: VerifyItemPayload[];
     verifyQueueCount: number;
     occurrences: PdfOccurrence[];
   };
@@ -173,6 +179,43 @@ export function Verifier() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  async function verifyInBatches(
+    items: VerifyItemPayload[],
+    base: Partial<PdfVerifyResponse> = {},
+  ) {
+    const collected: LookupResult[] = [];
+    for (let i = 0; i < items.length; i += VERIFY_BATCH) {
+      const slice = items.slice(i, i + VERIFY_BATCH);
+      setProgress({ done: i, total: items.length });
+      const batchRes = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: slice }),
+      });
+      const batch = await readJson<VerifyResponse>(batchRes, "Verification failed");
+      if (!batchRes.ok) {
+        throw new Error(
+          (batch as { error?: string }).error ||
+            `Verification failed after ${collected.length} of ${items.length} authorities.`,
+        );
+      }
+      collected.push(...batch.results);
+      const snapshot = [...collected];
+      startTransition(() =>
+        setData({
+          generatedAt: batch.generatedAt,
+          methodology: batch.methodology,
+          ...base,
+          verified: true,
+          results: snapshot,
+          resultCount: snapshot.length,
+          counts: tallyConsensus(snapshot),
+        }),
+      );
+    }
+    setProgress(null);
+  }
+
   async function runVerifyPaste(payload?: string) {
     const citations = (payload ?? text).trim();
     if (!citations) {
@@ -181,21 +224,39 @@ export function Verifier() {
     }
     setLoading(true);
     setError(null);
+    setProgress(null);
     try {
-      const res = await fetch("/api/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ citations }),
-      });
-      const json = await readJson<PdfVerifyResponse>(res, "Verification failed");
-      if (!res.ok) throw new Error(json.error || "Verification failed");
-      startTransition(() => setData(json));
+      const items = citations
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((citation) => ({ citation }));
+      if (!items.length) {
+        setError("Paste at least one citation.");
+        return;
+      }
+      startTransition(() =>
+        setData({
+          generatedAt: new Date().toISOString(),
+          methodology: {
+            sources: [],
+            reference: "",
+            controls: { positive: CONTROLS.positive, negative: CONTROLS.negative },
+          },
+          resultCount: 0,
+          counts: tallyConsensus([]),
+          results: [],
+          verified: false,
+        }),
+      );
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      await verifyInBatches(items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
       setData(null);
     } finally {
       setLoading(false);
+      setProgress(null);
     }
   }
 
@@ -218,42 +279,17 @@ export function Verifier() {
       const base = await readJson<PdfVerifyResponse>(res, "PDF verification failed");
       if (!res.ok) throw new Error(base.error || "PDF verification failed");
 
-      const queue = base.extraction?.verifyQueue ?? [];
-      startTransition(() => setData({ ...base, verified: queue.length === 0 }));
+      const items =
+        base.extraction?.verifyItems ??
+        (base.extraction?.verifyQueue ?? []).map((citation) => ({ citation }));
+      startTransition(() => setData({ ...base, verified: items.length === 0 }));
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      if (!queue.length) return;
+      if (!items.length) return;
 
       // Then verify in batches, showing each one as it lands rather than
-      // holding everything back until the last authority resolves.
-      const collected: LookupResult[] = [];
-      for (let i = 0; i < queue.length; i += VERIFY_BATCH) {
-        const slice = queue.slice(i, i + VERIFY_BATCH);
-        setProgress({ done: i, total: queue.length });
-        const batchRes = await fetch("/api/verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ citations: slice.join("\n") }),
-        });
-        const batch = await readJson<VerifyResponse>(batchRes, "Verification failed");
-        if (!batchRes.ok) {
-          throw new Error(
-            (batch as { error?: string }).error ||
-              `Verification failed after ${collected.length} of ${queue.length} authorities.`,
-          );
-        }
-        collected.push(...batch.results);
-        const snapshot = [...collected];
-        startTransition(() =>
-          setData({
-            ...base,
-            verified: true,
-            results: snapshot,
-            resultCount: snapshot.length,
-            counts: tallyConsensus(snapshot),
-          }),
-        );
-      }
-      setProgress(null);
+      // holding everything back until the last authority resolves. Passages
+      // harvested from the filing travel with each item so quote checks run.
+      await verifyInBatches(items, base);
     } catch (err) {
       setError(err instanceof Error ? err.message : "PDF verification failed");
     } finally {

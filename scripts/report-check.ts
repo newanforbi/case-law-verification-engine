@@ -64,7 +64,7 @@ assert.equal(Object.keys(report.summary.existence).length, 7);
 assert.equal(Object.keys(report.summary.support).length, 6);
 
 // The artifact carries its own limits, and they are specific to this run.
-assert.match(report.caveats[0], /not holdings/i);
+assert.match(report.caveats[0], /what the opinion says/i);
 assert.ok(report.caveats.some((c) => /not checked at all/i.test(c)));
 assert.ok(report.caveats.some((c) => /outside both free sources/i.test(c)));
 

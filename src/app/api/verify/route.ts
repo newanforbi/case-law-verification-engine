@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { verifyCitations } from "@/lib/verify";
+import {
+  verifyCitationItems,
+  verifyCitations,
+  type VerifyRequestItem,
+} from "@/lib/verify";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,11 +11,29 @@ export const maxDuration = 120;
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { citations?: string; text?: string };
+    const body = (await request.json()) as {
+      citations?: string;
+      text?: string;
+      items?: VerifyRequestItem[];
+    };
+
+    if (Array.isArray(body.items) && body.items.length) {
+      const items = body.items
+        .map((item) => ({
+          citation: String(item?.citation ?? "").trim(),
+          passages: Array.isArray(item?.passages)
+            ? item.passages.map((p) => String(p)).filter(Boolean).slice(0, 5)
+            : [],
+        }))
+        .filter((item) => item.citation);
+      const result = await verifyCitationItems(items);
+      return NextResponse.json(result);
+    }
+
     const raw = (body.citations ?? body.text ?? "").trim();
     if (!raw) {
       return NextResponse.json(
-        { error: "Missing citations. Paste one citation per line." },
+        { error: "Missing citations. Paste one citation per line, or send items[]." },
         { status: 400 },
       );
     }

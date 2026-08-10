@@ -1,7 +1,9 @@
 POINTS AND AUTHORITIES
+Absolute immunity does not extend to private prison guards.
 See Richardson v. McKnight, 521 U.S. 399, 402 (1997)
 ("private prison guards").
-Judicial immunity: Stump v. Sparkman, 435 U.S. 349 (1978).
+Judicial immunity remains the rule for judges acting in their judicial capacity:
+Stump v. Sparkman, 435 U.S. 349 (1978).
 Negative control In re Leman, 66 Cal.App.5th 200 (2021).
 Wrong pin In re Hudson, 1 Cal.App.4th 1 (2006).
 Correct pin In re Hudson, 143 Cal.App.4th 1 (2006).
@@ -10,3 +12,5 @@ Also cite 42 U.S.C. § 1983 in the same brief.
 Local practice: L.R. 7-1 and Civil L.R. 3-4.
 County of Santa Clara v. Superior Court, 235 Cal.App.4th 464 (2015)
 (‘public entity liability’).
+But see Armondo v. Department of Motor Vehicles, 15 Cal.App.4th 1174 (1993),
+which cuts against a disappearing-arrest theory under the Vehicle Code.

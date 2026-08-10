@@ -7,6 +7,13 @@
   "mustHarvestPassages": {
     "Richardson": ["private prison guards"]
   },
+  "mustHarvestPropositions": {
+    "Richardson": ["absolute immunity"],
+    "Armondo": ["disappearing-arrest"]
+  },
+  "mustPropositionRoles": {
+    "Armondo": "anticipates_contrary"
+  },
   "mustNotQueue": ["1983"],
   "minAuthorities": 4,
   "minLocalRules": 1

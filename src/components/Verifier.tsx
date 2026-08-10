@@ -38,6 +38,11 @@ interface PdfOccurrence {
 interface VerifyItemPayload {
   citation: string;
   passages?: string[];
+  propositions?: Array<{
+    text: string;
+    page?: number;
+    role: "supports" | "distinguishes" | "anticipates_contrary";
+  }>;
 }
 
 interface PdfVerifyResponse extends VerifyResponse {
@@ -559,6 +564,9 @@ export function Verifier() {
                 {data.document.pageCount === 1 ? "page" : "pages"} ·{" "}
                 {data.extraction.totalMatches} citation matches ·{" "}
                 {data.extraction.verifyQueueCount} authorities queued for verify
+                {data.extraction.verifyItems?.some((i) => (i.propositions?.length ?? 0) > 0)
+                  ? ` · ${data.extraction.verifyItems.reduce((n, i) => n + (i.propositions?.length ?? 0), 0)} propositions`
+                  : ""}
                 {data.document.textSource === "ocr"
                   ? ` · text via OCR${
                       data.document.ocr
@@ -885,6 +893,31 @@ function ResultRow({ result }: { result: LookupResult }) {
           {[result.courtLabel, result.decisionYear].filter(Boolean).join(" · ")}
         </p>
       )}
+
+      {result.propositions && result.propositions.length > 0 ? (
+        <div className="mt-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
+            Filing propositions
+          </p>
+          <ul className="mt-2 space-y-2">
+            {result.propositions.map((p, i) => (
+              <li key={`${p.text.slice(0, 24)}-${i}`} className="text-sm text-parchment">
+                <span className="mr-2 text-[11px] uppercase tracking-wide text-brass/70">
+                  {p.role === "anticipates_contrary"
+                    ? "contrary"
+                    : p.role === "distinguishes"
+                      ? "distinguish"
+                      : "supports"}
+                </span>
+                {p.page ? (
+                  <span className="mr-2 text-parchment-dim">p.{p.page}</span>
+                ) : null}
+                <span className="text-parchment-dim">{p.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {result.links && result.links.length > 0 ? (
         <div className="mt-3">

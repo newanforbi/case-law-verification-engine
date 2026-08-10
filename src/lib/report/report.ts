@@ -16,6 +16,7 @@ import type {
   LookupResult,
   PinFinding,
   QuoteFinding,
+  Proposition,
   ReferenceLink,
   Support,
   VerifyResponse,
@@ -47,6 +48,8 @@ export interface ReportRecord {
   pin: PinFinding | null;
   /** Primary (voting-source) and reference (constructed) open links. */
   links: ReferenceLink[];
+  /** Filing propositions harvested near the cite. */
+  propositions: Proposition[];
 }
 
 export interface VerificationReport {
@@ -108,6 +111,7 @@ function toRecord(r: LookupResult): ReportRecord {
     quotes: r.support.quotes,
     pin: r.support.pin,
     links: r.links ?? [],
+    propositions: r.propositions ?? [],
   };
 }
 

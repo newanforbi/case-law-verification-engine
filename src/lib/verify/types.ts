@@ -8,7 +8,7 @@ export type { CoverageEnvelope, CoverageReason, Jurisdiction } from "./coverage"
  * Method identity stamped into every verify response and exportable report.
  * Bump when consensus rules, quote matching, coverage, or report schema change.
  */
-export const METHOD_VERSION = "2026.08.2";
+export const METHOD_VERSION = "2026.08.3";
 
 /**
  * Openable URL attached to a lookup. Primary = from a voting source or the
@@ -21,6 +21,18 @@ export interface ReferenceLink {
   url: string;
   kind: ReferenceLinkKind;
   origin: "source_hit" | "opinion_text" | "constructed";
+}
+
+/** Filing-side claim tied to an authority (from citation extract). */
+export type PropositionRole =
+  | "supports"
+  | "distinguishes"
+  | "anticipates_contrary";
+
+export interface Proposition {
+  text: string;
+  page?: number;
+  role: PropositionRole;
 }
 
 /**
@@ -134,6 +146,11 @@ export interface LookupResult {
    * text; reference links are constructed and do not affect consensus.
    */
   links?: ReferenceLink[];
+  /**
+   * Propositions harvested from the filing around this citation (how the
+   * pleading uses the authority). Empty for paste-only verifies with no context.
+   */
+  propositions?: Proposition[];
   /** When both sources finished and the verdict was assigned. */
   checkedAt?: string;
   /** Set only when the lookup itself failed, rather than the citation. */

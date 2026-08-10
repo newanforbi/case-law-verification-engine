@@ -3,15 +3,19 @@ import { extractCitationsFromText } from "../src/lib/citations/extract";
 
 const sample = `
 POINTS AND AUTHORITIES
+Absolute immunity does not extend to private prison guards.
 See Richardson v. McKnight, 521 U.S. 399, 402 (1997)
 ("private prison guards").
-Judicial immunity: Stump v. Sparkman, 435 U.S. 349 (1978).
+Judicial immunity remains the rule for judges acting in their judicial capacity:
+Stump v. Sparkman, 435 U.S. 349 (1978).
 Negative control In re Leman, 66 Cal.App.5th 200 (2021).
 Wrong pin In re Hudson, 1 Cal.App.4th 1 (2006).
 Correct pin In re Hudson, 143 Cal.App.4th 1 (2006).
 Westlaw: Burrell v. Jackson, 2003 WL 23545858.
 Also cite 42 U.S.C. § 1983 in the same brief.
 Local practice: L.R. 7-1 and Civil L.R. 3-4.
+But see Armondo v. Department of Motor Vehicles, 15 Cal.App.4th 1174 (1993),
+which cuts against a disappearing-arrest theory under the Vehicle Code.
 `;
 
 const out = extractCitationsFromText(sample);
@@ -42,11 +46,28 @@ assert.ok(
   richardson!.passages.some((p) => /private prison guards/i.test(p)),
   "quoted passage near Richardson should be harvested",
 );
+assert.ok(
+  richardson!.propositions.some((p) => /absolute immunity|private prison/i.test(p.text)),
+  `Richardson should yield a filing proposition, got ${JSON.stringify(richardson!.propositions)}`,
+);
+assert.equal(richardson!.propositions[0]?.role, "supports");
+
 const stump = out.verifyItems.find((i) => i.citation.includes("Stump"));
 assert.ok(stump, "verifyItems should include Stump");
 assert.ok(
   !stump!.passages.some((p) => /private prison guards/i.test(p)),
   "Richardson's quote must not be attributed to the next authority",
+);
+assert.ok(
+  stump!.propositions.some((p) => /judicial immunity/i.test(p.text)),
+  `Stump should harvest the immunity proposition, got ${JSON.stringify(stump!.propositions)}`,
+);
+
+const armondo = out.verifyItems.find((i) => /Armondo/i.test(i.citation));
+assert.ok(armondo, "verifyItems should include Armondo");
+assert.ok(
+  armondo!.propositions.some((p) => p.role === "anticipates_contrary"),
+  `Armondo should be flagged anticipates_contrary, got ${JSON.stringify(armondo!.propositions)}`,
 );
 
 // Local-rule pattern must stay tight — a loose L.R. matcher hangs real PDFs.
@@ -57,7 +78,11 @@ console.log(
     {
       countsByKind: out.countsByKind,
       verifyQueue: out.verifyQueue,
-      verifyItems: out.verifyItems,
+      verifyItems: out.verifyItems.map((i) => ({
+        citation: i.citation,
+        passages: i.passages,
+        propositions: i.propositions,
+      })),
     },
     null,
     2,

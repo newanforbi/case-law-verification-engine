@@ -21,6 +21,8 @@ export async function POST(request: Request) {
       items?: VerifyRequestItem[];
       /** When true, also run the method control pair and attach controlRun. */
       includeControlRun?: boolean;
+      /** When true, score filing propositions against opinion text. */
+      holdingAudit?: boolean;
       /** Controls-only request: return methodology + controlRun, no citations. */
       controlsOnly?: boolean;
     };
@@ -55,6 +57,7 @@ export async function POST(request: Request) {
     }
 
     const includeControlRun = body.includeControlRun === true;
+    const holdingAudit = body.holdingAudit === true;
 
     if (Array.isArray(body.items) && body.items.length) {
       const items = body.items
@@ -82,7 +85,10 @@ export async function POST(request: Request) {
             : [],
         }))
         .filter((item) => item.citation);
-      const result = await verifyCitationItems(items, { includeControlRun });
+      const result = await verifyCitationItems(items, {
+        includeControlRun,
+        holdingAudit,
+      });
       return NextResponse.json(result);
     }
 
@@ -93,7 +99,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const result = await verifyCitations(raw, { includeControlRun });
+    const result = await verifyCitations(raw, { includeControlRun, holdingAudit });
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Verification failed";

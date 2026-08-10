@@ -1,8 +1,9 @@
 import { lookupCap } from "./cap";
 import { lookupCourtListener } from "./courtlistener";
+import { evaluateHoldingUse } from "./holding";
 import { enrichLookupMetadata } from "./links";
 import { namesCompatible } from "./names";
-import { fetchOpinionText } from "./opinion";
+import { fetchOpinionText, type OpinionText } from "./opinion";
 import {
   extractQuotedPassages,
   matchPassage,
@@ -22,12 +23,15 @@ import type {
   VerifyResponse,
 } from "./types";
 
-export { CONSENSUS_KINDS, METHOD_VERSION, SUPPORT_KINDS, tallyConsensus } from "./types";
+export { CONSENSUS_KINDS, HOLDING_FITS, METHOD_VERSION, SUPPORT_KINDS, tallyConsensus } from "./types";
 export type {
   Consensus,
   ControlResult,
   ControlRun,
   CoverageEnvelope,
+  HoldingFit,
+  HoldingPropositionFinding,
+  HoldingReport,
   LookupResult,
   PinFinding,
   Proposition,
@@ -47,6 +51,7 @@ export {
   courtLabelForPin,
   parseDecisionYear,
 } from "./links";
+export { evaluateHoldingUse } from "./holding";
 
 export const CONTROLS = {
   positive: "Richardson v. McKnight, 521 U.S. 399 (1997)",
@@ -131,11 +136,11 @@ export function applyConsensus(result: LookupResult): Consensus {
  * to read otherwise, and it will not report a quote missing from text it could
  * not retrieve — the same rule the existence probe follows about absence.
  */
-async function evaluateSupport(
+function evaluateSupportWithOpinion(
   citation: string,
-  result: LookupResult,
-  extraPassages: string[] = [],
-): Promise<SupportReport> {
+  extraPassages: string[],
+  opinion: OpinionText | null,
+): SupportReport {
   const fromCite = extractQuotedPassages(citation);
   const seen = new Set(fromCite.map((p) => p.toLowerCase()));
   const passages = [...fromCite];
@@ -152,15 +157,13 @@ async function evaluateSupport(
     return { verdict: "NO_QUOTE", quotes: [], pin: null };
   }
 
-  const found = result.sources.filter((s) => s.outcome === "FOUND");
-  const opinion = await fetchOpinionText({
-    capUrl: found.find((s) => s.source === "case.law_static")?.url,
-    courtListenerUrl: found.find((s) => s.source === "courtlistener")?.url,
-  });
   if (!opinion) {
     return {
       verdict: "UNCHECKED",
-      quotes: passages.map((passage) => ({ passage, match: "INDETERMINATE" as const })),
+      quotes: passages.map((passage) => ({
+        passage,
+        match: "INDETERMINATE" as const,
+      })),
       pin: pinCite ? { page: pinCite.pinPage, present: null } : null,
     };
   }
@@ -220,7 +223,7 @@ function methodologyBlock(): VerifyResponse["methodology"] {
       "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
     ],
     reference:
-      "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument. Filing propositions are harvested from surrounding prose (supports / distinguishes / anticipates contrary) for later holding-use audit; they do not change existence verdicts. Open links marked primary come from voting sources (or retrieved opinion text); constructed Justia / LOC / Scholar links are references only.",
+      "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument. Optional holding-use audit scores harvested filing propositions against opinion text (heuristic overlap; HOLDING_AUDITOR=heuristic|llm) and never changes existence verdicts. Open links marked primary come from voting sources (or retrieved opinion text); constructed Justia / LOC / Scholar links are references only.",
     controls: {
       positive: CONTROLS.positive,
       negative: CONTROLS.negative,
@@ -261,13 +264,19 @@ export async function runMethodControls(): Promise<ControlRun> {
   };
 }
 
+export interface LookupOptions {
+  /** When true, score harvested propositions against opinion text. */
+  holdingAudit?: boolean;
+}
+
 export async function lookupOneSafe(
   citation: string,
   passages: string[] = [],
   propositions: Proposition[] = [],
+  options: LookupOptions = {},
 ): Promise<LookupResult> {
   try {
-    return await lookupOne(citation, passages, propositions);
+    return await lookupOne(citation, passages, propositions, options);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     const rep = parseReporter(citation);
@@ -292,6 +301,7 @@ export async function lookupOne(
   citation: string,
   passages: string[] = [],
   propositions: Proposition[] = [],
+  options: LookupOptions = {},
 ): Promise<LookupResult> {
   const name = guessName(citation);
   const rep = parseReporter(citation);
@@ -316,7 +326,40 @@ export async function lookupOne(
   ]);
   result.sources.push(cl, cap);
   applyConsensus(result);
-  result.support = await evaluateSupport(citation, result, passages);
+
+  const wantHolding = options.holdingAudit === true && propositions.length > 0;
+  const needOpinion =
+    wantHolding ||
+    passages.length > 0 ||
+    extractQuotedPassages(citation).length > 0 ||
+    Boolean(rep && parsePinCite(citation, rep.page));
+
+  let opinion: OpinionText | null = null;
+  if (
+    needOpinion &&
+    (result.consensus === "FOUND" ||
+      result.consensus === "PARTIAL" ||
+      result.consensus === "CAPTION_MISMATCH")
+  ) {
+    const found = result.sources.filter((s) => s.outcome === "FOUND");
+    opinion = await fetchOpinionText({
+      capUrl: found.find((s) => s.source === "case.law_static")?.url,
+      courtListenerUrl: found.find((s) => s.source === "courtlistener")?.url,
+    });
+  }
+
+  result.support = evaluateSupportWithOpinion(citation, passages, opinion);
+
+  if (wantHolding) {
+    result.holding = evaluateHoldingUse({
+      propositions,
+      opinionText: opinion?.text,
+      consensus: result.consensus,
+      textUrl: opinion?.url ?? result.support.textUrl,
+      textSource: opinion?.source ?? result.support.textSource,
+    });
+  }
+
   result.checkedAt = new Date().toISOString();
   return enrichLookupMetadata(result);
 }
@@ -352,7 +395,7 @@ export function parseCitationInput(raw: string): string[] {
 
 export async function verifyCitationItems(
   items: VerifyRequestItem[],
-  options: { includeControlRun?: boolean } = {},
+  options: { includeControlRun?: boolean; holdingAudit?: boolean } = {},
 ): Promise<VerifyResponse> {
   if (!items.length) {
     throw new Error("Provide at least one citation to verify.");
@@ -364,6 +407,7 @@ export async function verifyCitationItems(
   // Off by default: clients that batch lookups would otherwise re-run the
   // control pair on every slice. Ask once per session when stamping a report.
   const includeControlRun = options.includeControlRun === true;
+  const holdingAudit = options.holdingAudit === true;
   const controlPromise = includeControlRun ? runMethodControls() : null;
 
   const results: LookupResult[] = [];
@@ -375,6 +419,7 @@ export async function verifyCitationItems(
         citation,
         item.passages ?? [],
         item.propositions ?? [],
+        { holdingAudit },
       ),
     );
   }
@@ -399,7 +444,7 @@ export async function verifyCitationItems(
 
 export async function verifyCitations(
   raw: string,
-  options: { includeControlRun?: boolean } = {},
+  options: { includeControlRun?: boolean; holdingAudit?: boolean } = {},
 ): Promise<VerifyResponse> {
   const cites = parseCitationInput(raw);
   return verifyCitationItems(

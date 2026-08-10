@@ -43,6 +43,17 @@ export function reportToWordHtml(report: VerificationReport): string {
       const props = (r.propositions ?? [])
         .map((p) => `[${esc(p.role)}] ${esc(p.text)}`)
         .join("<br/>");
+      const holding = r.holding
+        ? [
+            `Overall: ${esc(r.holding.overall)} (${esc(r.holding.auditor)})`,
+            ...(r.holding.findings ?? []).map((f) => {
+              const bits = [`[${esc(f.fit)}] ${esc(f.proposition.text)}`];
+              if (f.excerpt) bits.push(`Excerpt: “${esc(f.excerpt)}”`);
+              if (f.suggestedRevision) bits.push(`Revision: ${esc(f.suggestedRevision)}`);
+              return bits.join("<br/>");
+            }),
+          ].join("<br/>")
+        : "—";
       const meta = [r.courtLabel, r.decisionYear].filter(Boolean).join(" · ");
       return `<tr>
   <td>${esc(r.citation)}${meta ? `<br/><span style="color:#555">${esc(meta)}</span>` : ""}</td>
@@ -52,6 +63,7 @@ export function reportToWordHtml(report: VerificationReport): string {
   <td>${esc(sources || "—")}</td>
   <td>${quotes}</td>
   <td>${props || "—"}</td>
+  <td>${holding}</td>
   <td>${links || "—"}</td>
   <td>${esc(r.checkedAt || "—")}</td>
 </tr>`;
@@ -118,12 +130,13 @@ export function reportToWordHtml(report: VerificationReport): string {
         <th>Sources</th>
         <th>Quotes</th>
         <th>Filing propositions</th>
+        <th>Holding use</th>
         <th>Open links</th>
         <th>Checked at</th>
       </tr>
     </thead>
     <tbody>
-${rows || `<tr><td colspan="9">No authorities in this report.</td></tr>`}
+${rows || `<tr><td colspan="10">No authorities in this report.</td></tr>`}
     </tbody>
   </table>
 

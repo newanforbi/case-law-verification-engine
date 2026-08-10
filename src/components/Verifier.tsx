@@ -880,6 +880,42 @@ function ResultRow({ result }: { result: LookupResult }) {
         </p>
       ) : null}
 
+      {(result.courtLabel || result.decisionYear) && (
+        <p className="mt-2 text-sm text-parchment-dim">
+          {[result.courtLabel, result.decisionYear].filter(Boolean).join(" · ")}
+        </p>
+      )}
+
+      {result.links && result.links.length > 0 ? (
+        <div className="mt-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
+            Open
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            {result.links.map((link) => (
+              <li key={link.url}>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-brass-soft underline-offset-2 hover:underline"
+                  title={
+                    link.kind === "primary"
+                      ? "From a voting source or retrieved opinion text"
+                      : "Constructed reference — does not affect the verdict"
+                  }
+                >
+                  {link.label}
+                  {link.kind === "reference" ? (
+                    <span className="text-parchment-dim"> (ref)</span>
+                  ) : null}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {result.support.quotes.length || result.support.pin ? (
         <div className="mt-4 border-l-2 border-[var(--line)] pl-3">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
@@ -888,9 +924,22 @@ function ResultRow({ result }: { result: LookupResult }) {
               <span className="font-normal normal-case tracking-normal text-parchment-dim">
                 {" "}
                 · read from{" "}
-                {result.support.textSource === "courtlistener"
-                  ? "CourtListener"
-                  : "CAP"}
+                {result.support.textUrl ? (
+                  <a
+                    href={result.support.textUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brass-soft underline-offset-2 hover:underline"
+                  >
+                    {result.support.textSource === "courtlistener"
+                      ? "CourtListener"
+                      : "CAP"}
+                  </a>
+                ) : result.support.textSource === "courtlistener" ? (
+                  "CourtListener"
+                ) : (
+                  "CAP"
+                )}
               </span>
             ) : null}
           </p>

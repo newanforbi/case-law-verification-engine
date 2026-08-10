@@ -6,9 +6,22 @@ export type { CoverageEnvelope, CoverageReason, Jurisdiction } from "./coverage"
 
 /**
  * Method identity stamped into every verify response and exportable report.
- * Bump when consensus rules, quote matching, or coverage semantics change.
+ * Bump when consensus rules, quote matching, coverage, or report schema change.
  */
-export const METHOD_VERSION = "2026.08.1";
+export const METHOD_VERSION = "2026.08.2";
+
+/**
+ * Openable URL attached to a lookup. Primary = from a voting source or the
+ * opinion text we retrieved. Reference = constructed public copy; never a vote.
+ */
+export type ReferenceLinkKind = "primary" | "reference";
+
+export interface ReferenceLink {
+  label: string;
+  url: string;
+  kind: ReferenceLinkKind;
+  origin: "source_hit" | "opinion_text" | "constructed";
+}
 
 /**
  * Every verdict, in the order a reader should scan them. Declared here, in the
@@ -107,11 +120,20 @@ export interface LookupResult {
   caseNameGuess: string;
   reporterPin: string | null;
   wlPin: string | null;
+  /** Year from a trailing parenthetical in the citation, when present. */
+  decisionYear?: string | null;
+  /** Court / reporter family label derived from the pin. */
+  courtLabel?: string | null;
   sources: SourceHit[];
   consensus: Consensus;
   matchedName: string;
   matchedCitations: string[];
   support: SupportReport;
+  /**
+   * Openable URLs. Primary links are from voting sources / retrieved opinion
+   * text; reference links are constructed and do not affect consensus.
+   */
+  links?: ReferenceLink[];
   /** When both sources finished and the verdict was assigned. */
   checkedAt?: string;
   /** Set only when the lookup itself failed, rather than the citation. */

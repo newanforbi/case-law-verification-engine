@@ -16,6 +16,7 @@ import type {
   LookupResult,
   PinFinding,
   QuoteFinding,
+  ReferenceLink,
   Support,
   VerifyResponse,
 } from "@/lib/verify";
@@ -35,6 +36,8 @@ export interface ReportRecord {
   parsedName: string;
   cite: string | null;
   westlaw: string | null;
+  decisionYear?: string | null;
+  courtLabel?: string | null;
   existence: Consensus;
   support: Support;
   matchedCaption: string;
@@ -42,6 +45,8 @@ export interface ReportRecord {
   sources: ReportSource[];
   quotes: QuoteFinding[];
   pin: PinFinding | null;
+  /** Primary (voting-source) and reference (constructed) open links. */
+  links: ReferenceLink[];
 }
 
 export interface VerificationReport {
@@ -86,6 +91,8 @@ function toRecord(r: LookupResult): ReportRecord {
     parsedName: r.caseNameGuess,
     cite: r.reporterPin,
     westlaw: r.wlPin,
+    decisionYear: r.decisionYear ?? null,
+    courtLabel: r.courtLabel ?? null,
     existence: r.consensus,
     support: r.support.verdict,
     matchedCaption: r.matchedName,
@@ -100,6 +107,7 @@ function toRecord(r: LookupResult): ReportRecord {
     })),
     quotes: r.support.quotes,
     pin: r.support.pin,
+    links: r.links ?? [],
   };
 }
 
@@ -113,6 +121,7 @@ function toRecord(r: LookupResult): ReportRecord {
 function caveatsFor(records: ReportRecord[], controlRun?: ControlRun): string[] {
   const out: string[] = [
     "We check what the opinion says, not whether it supports the argument. A case can be real, correctly quoted, and still not carry the weight the filing places on it.",
+    "Primary open links come from CourtListener or CAP (or retrieved opinion text). Constructed Justia, Library of Congress, and Google Scholar links are references only — they do not affect existence verdicts.",
   ];
 
   const count = (fn: (r: ReportRecord) => boolean) => records.filter(fn).length;

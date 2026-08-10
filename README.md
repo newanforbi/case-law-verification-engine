@@ -9,6 +9,8 @@ Upload a pleading (**Word .docx** or PDF) or paste cites. Citeproof extracts aut
 
 We check what the opinion says, not whether it supports your argument.
 
+Each result includes **open links**: primary URLs from CourtListener/CAP (or retrieved opinion text), plus constructed Justia / Library of Congress / Google Scholar references. Constructed links never affect the verdict.
+
 ## Existence verdicts
 
 | Status | Meaning |
@@ -75,7 +77,8 @@ curl -s -X POST http://localhost:3000/api/verify-pdf \
 ```
 
 ```bash
-npm run test:unit          # parser + consensus + quotes + report + regression + docx
+npm run test:unit          # parser + consensus + quotes + links + report + regression + docx
+npm run test:links         # reference-link construction (offline)
 npm run test:ocr           # image-only PDF → tesseract OCR → citation extract
 npm run test:docx          # sample pleading .docx → extract → citation queue
 npm run test:controls      # live Richardson(+) / Leman(−)

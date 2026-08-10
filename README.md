@@ -87,7 +87,8 @@ Reports carry `methodVersion`, per-source `checkedAt`, structured coverage envel
 live control-pair results, and can be downloaded as JSON or Word-compatible `.doc`.
 
 Scanned / image-only PDFs are OCR'd automatically (pdf-parse screenshots → tesseract.js),
-up to 12 pages per upload. Text-layer PDFs skip OCR.
+up to 12 pages per upload. Text-layer PDFs skip OCR. PACER/ECF filings that only have a
+selectable page stamp (with a scanned body) are treated as image-only and OCR'd.
 
 PDF size: up to **40 MB**. Files ≤ 4 MB post as multipart; larger files upload to
 **Vercel Blob** (`/api/pdf/upload`) then `/api/verify-pdf` fetches by `blobUrl`.

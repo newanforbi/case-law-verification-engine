@@ -1,5 +1,6 @@
 import { MAX_PDF_BYTES, MAX_PDF_LABEL } from "./limits";
 import { MAX_OCR_PAGES, ocrPngPages } from "./ocr";
+import { MIN_SUBSTANTIVE_CHARS, textLayerIsUsable } from "./text-layer";
 
 export interface PdfPageText {
   page: number;
@@ -24,8 +25,6 @@ export interface PdfExtraction {
     elapsedMs: number;
   };
 }
-
-const MIN_TEXT_CHARS = 40;
 
 export interface ExtractPdfOptions {
   /** When false, skip OCR and return the empty text-layer result. Default true. */
@@ -58,12 +57,18 @@ function finalize(
 ): PdfExtraction {
   const fullText = pages.map((p) => p.text).join("\n\n");
   const charCount = fullText.replace(/\s+/g, "").length;
+  // Text layers must clear the stamp/sparse-page gate (see text-layer.ts).
+  // OCR output is body text — a simple char floor is enough.
+  const usable =
+    textSource === "ocr"
+      ? charCount >= MIN_SUBSTANTIVE_CHARS
+      : textLayerIsUsable(pages);
   return {
     fileName,
     pageCount,
     pages,
     fullText,
-    hasTextLayer: charCount >= MIN_TEXT_CHARS,
+    hasTextLayer: usable,
     charCount,
     textSource,
     ocr,
@@ -179,11 +184,13 @@ export async function extractPdfText(
   }
 
   const textLayer = finalize(fileName, pageCount, textPages, "text_layer");
+  // Stamp-only PACER/ECF layers (headers, no body) look non-empty by raw
+  // character count — still fall through to OCR when the layer is unusable.
   if (textLayer.hasTextLayer || !allowOcr) {
     return textLayer;
   }
 
-  // Image-only / scanned filing: render pages and OCR them.
+  // Image-only / scanned / stamp-only filing: render pages and OCR them.
   try {
     const { pages, meta } = await ocrFromScreenshots(
       PDFParse,

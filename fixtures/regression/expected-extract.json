@@ -1,0 +1,13 @@
+{
+  "mustIncludeInQueue": [
+    "Richardson v. McKnight, 521 U.S. 399, 402 (1997)",
+    "In re Leman, 66 Cal.App.5th 200 (2021)",
+    "Burrell v. Jackson, 2003 WL 23545858"
+  ],
+  "mustHarvestPassages": {
+    "Richardson": ["private prison guards"]
+  },
+  "mustNotQueue": ["1983"],
+  "minAuthorities": 4,
+  "minLocalRules": 1
+}

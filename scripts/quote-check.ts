@@ -28,6 +28,16 @@ assert.deepEqual(extractQuotedPassages('The court said "firmly rooted" today.'),
 assert.deepEqual(extractQuotedPassages("It held “no immunity here” again."), [
   "no immunity here",
 ]);
+assert.ok(
+  extractQuotedPassages("Holding (‘public entity liability’) stands.").some((p) =>
+    /public entity liability/i.test(p),
+  ),
+);
+assert.ok(
+  extractQuotedPassages('See id. ("private prison guards").').some((p) =>
+    /private prison guards/i.test(p),
+  ),
+);
 
 // Exact language, differing only in line wrapping.
 assert.equal(

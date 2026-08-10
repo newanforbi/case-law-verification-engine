@@ -1,6 +1,11 @@
 /** Client-safe constants (no Node fetch / CAP / CourtListener I/O). */
 
-export { CONSENSUS_KINDS, SUPPORT_KINDS, tallyConsensus } from "./types";
+export {
+  CONSENSUS_KINDS,
+  METHOD_VERSION,
+  SUPPORT_KINDS,
+  tallyConsensus,
+} from "./types";
 
 /**
  * Upload ceiling, enforced on both sides.
@@ -23,6 +28,11 @@ export const CONTROLS = {
   positive: "Richardson v. McKnight, 521 U.S. 399 (1997)",
   negative: "In re Leman, 66 Cal.App.5th 200",
 } as const;
+
+export const CONTROL_EXPECTATIONS = {
+  positive: "FOUND" as const,
+  negative: "NOT_FOUND" as const,
+};
 
 export const EXAMPLES = [
   CONTROLS.positive,

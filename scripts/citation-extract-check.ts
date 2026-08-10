@@ -42,6 +42,12 @@ assert.ok(
   richardson!.passages.some((p) => /private prison guards/i.test(p)),
   "quoted passage near Richardson should be harvested",
 );
+const stump = out.verifyItems.find((i) => i.citation.includes("Stump"));
+assert.ok(stump, "verifyItems should include Stump");
+assert.ok(
+  !stump!.passages.some((p) => /private prison guards/i.test(p)),
+  "Richardson's quote must not be attributed to the next authority",
+);
 
 // Local-rule pattern must stay tight — a loose L.R. matcher hangs real PDFs.
 assert.ok((out.countsByKind.rule_local || 0) >= 1, "expected local rule hits");

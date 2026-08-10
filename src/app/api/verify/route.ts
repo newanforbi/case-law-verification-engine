@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import {
+  CONTROL_EXPECTATIONS,
+  CONTROLS,
+  METHOD_VERSION,
+  runMethodControls,
   verifyCitationItems,
   verifyCitations,
   type VerifyRequestItem,
@@ -15,7 +19,42 @@ export async function POST(request: Request) {
       citations?: string;
       text?: string;
       items?: VerifyRequestItem[];
+      /** When true, also run the method control pair and attach controlRun. */
+      includeControlRun?: boolean;
+      /** Controls-only request: return methodology + controlRun, no citations. */
+      controlsOnly?: boolean;
     };
+
+    if (body.controlsOnly) {
+      const controlRun = await runMethodControls();
+      return NextResponse.json({
+        generatedAt: new Date().toISOString(),
+        methodVersion: METHOD_VERSION,
+        methodology: {
+          version: METHOD_VERSION,
+          sources: [
+            "CourtListener /api/rest/v4/search/",
+            "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
+          ],
+          reference:
+            "Method control pair only — proves the verifier still resolves a known case and rejects a known fabrication.",
+          controls: {
+            positive: CONTROLS.positive,
+            negative: CONTROLS.negative,
+            expected: {
+              positive: CONTROL_EXPECTATIONS.positive,
+              negative: CONTROL_EXPECTATIONS.negative,
+            },
+          },
+        },
+        controlRun,
+        resultCount: 0,
+        counts: {},
+        results: [],
+      });
+    }
+
+    const includeControlRun = body.includeControlRun === true;
 
     if (Array.isArray(body.items) && body.items.length) {
       const items = body.items
@@ -26,7 +65,7 @@ export async function POST(request: Request) {
             : [],
         }))
         .filter((item) => item.citation);
-      const result = await verifyCitationItems(items);
+      const result = await verifyCitationItems(items, { includeControlRun });
       return NextResponse.json(result);
     }
 
@@ -37,7 +76,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const result = await verifyCitations(raw);
+    const result = await verifyCitations(raw, { includeControlRun });
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Verification failed";

@@ -153,12 +153,13 @@ const PAIR_WINDOW = 160;
 /** Short window for UI occurrence snippets. */
 const CONTEXT_CHARS = 120;
 /**
- * Quote harvest is biased forward: filings usually put the quoted language
- * immediately after the cite. A wide lookbehind steals the previous cite's
- * quote and attributes it to the next authority.
+ * Quote harvest is forward-only from the authority span. Filings put the
+ * quoted language after the cite; a lookbehind steals the previous cite's
+ * trailing parenthetical and attributes it to the next authority. The forward
+ * window is wide enough for a signal + parenthetical quote on the next line,
+ * and is clipped at the next authority on the same page.
  */
-const QUOTE_HARVEST_BEFORE = 40;
-const QUOTE_HARVEST_AFTER = 280;
+const QUOTE_HARVEST_AFTER = 420;
 
 function overlaps(
   claimed: Array<[number, number]>,
@@ -182,7 +183,13 @@ function tidy(raw: string): string {
 function pairAuthority(
   text: string,
   nameEnd: number,
-): { reporter: string; year: string | null; pinPage: string | null } | null {
+): {
+  reporter: string;
+  year: string | null;
+  pinPage: string | null;
+  /** Absolute end index covering reporter, pin page, and year. */
+  end: number;
+} | null {
   const tail = text.slice(nameEnd, nameEnd + PAIR_WINDOW);
   REPORTER_RX.lastIndex = 0;
   const rep = REPORTER_RX.exec(tail);
@@ -203,10 +210,22 @@ function pairAuthority(
   const pinM = /^\s*,\s*(\d{1,5})\b/.exec(after);
   if (pinM) pinPage = pinM[1];
 
+  let relativeEnd = rep.index + rep[0].length;
+  if (pinM) relativeEnd = Math.max(relativeEnd, rep.index + rep[0].length + pinM[0].length);
+  if (ym && ym.index >= rep.index) {
+    relativeEnd = Math.max(relativeEnd, ym.index + ym[0].length);
+  } else if (ym) {
+    // Year before reporter is already inside the name→reporter gap.
+  }
+  // Include a trailing year immediately after the pin when present.
+  const yearAfter = /^\s*\((?:19|20)\d{2}\)/.exec(tail.slice(relativeEnd));
+  if (yearAfter) relativeEnd += yearAfter[0].length;
+
   return {
     reporter: tidy(rep[0]),
     year,
     pinPage,
+    end: nameEnd + relativeEnd,
   };
 }
 
@@ -271,13 +290,16 @@ function scanPage(text: string, page: number): ExtractedCitation[] {
       let full = `${name}, ${paired.reporter}`;
       if (paired.pinPage) full += `, ${paired.pinPage}`;
       if (paired.year) full += ` (${paired.year})`;
+      // end covers the pin (not just the caption) so quote harvest can clip
+      // neighboring authorities without leaving this cite's quote in the next
+      // cite's lookbehind window.
       out.push({
         kind: "authority",
         citation: full,
         page,
-        context: contextAround(text, start, end + PAIR_WINDOW),
+        context: contextAround(text, start, paired.end),
         start,
-        end,
+        end: paired.end,
       });
     }
     out.push({
@@ -298,6 +320,20 @@ function normalizeKey(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function nextAuthorityStart(
+  citations: ExtractedCitation[],
+  current: ExtractedCitation,
+): number | null {
+  let best: number | null = null;
+  for (const other of citations) {
+    if (other.kind !== "authority") continue;
+    if (other.page !== current.page) continue;
+    if (other.start <= current.start) continue;
+    if (best === null || other.start < best) best = other.start;
+  }
+  return best;
+}
+
 function harvestPassages(
   citations: ExtractedCitation[],
   cite: string,
@@ -315,13 +351,17 @@ function harvestPassages(
     if (ck !== key && !key.startsWith(ck) && !ck.startsWith(key)) continue;
 
     const pageText = pageTextByPage.get(c.page) || "";
+    // From this authority through the gap before the next one — never back
+    // into the previous authority's trailing quote.
+    const nextStart = nextAuthorityStart(citations, c);
+    const softStart = c.start;
+    const softEnd = Math.min(
+      pageText.length,
+      c.end + QUOTE_HARVEST_AFTER,
+      nextStart ?? Number.POSITIVE_INFINITY,
+    );
     const window = pageText
-      ? tidy(
-          pageText.slice(
-            Math.max(0, c.start - QUOTE_HARVEST_BEFORE),
-            Math.min(pageText.length, c.end + QUOTE_HARVEST_AFTER),
-          ),
-        )
+      ? tidy(pageText.slice(softStart, softEnd))
       : c.context;
 
     for (const passage of extractQuotedPassages(window)) {
@@ -330,7 +370,20 @@ function harvestPassages(
       if (!pk || pk.length < 16 || seen.has(pk)) continue;
       seen.add(pk);
       passages.push(passage);
-      if (passages.length >= 3) return passages;
+      if (passages.length >= 4) return passages;
+    }
+
+    // Em-dash / signal attribution without wrapping quotes still sometimes
+    // carries a quoted clause further down the same sentence.
+    const dashWindow = window.replace(/[—–]/g, " — ");
+    if (dashWindow !== window) {
+      for (const passage of extractQuotedPassages(dashWindow)) {
+        const pk = normalizeKey(passage);
+        if (!pk || pk.length < 16 || seen.has(pk)) continue;
+        seen.add(pk);
+        passages.push(passage);
+        if (passages.length >= 4) return passages;
+      }
     }
   }
 

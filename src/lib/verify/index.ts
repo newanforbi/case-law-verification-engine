@@ -9,9 +9,10 @@ import {
   parsePinCite,
 } from "./quotes";
 import { guessName, parseReporter, WL_RE } from "./reporters";
-import { tallyConsensus } from "./types";
+import { METHOD_VERSION, tallyConsensus } from "./types";
 import type {
   Consensus,
+  ControlRun,
   LookupResult,
   PinFinding,
   Support,
@@ -19,9 +20,12 @@ import type {
   VerifyResponse,
 } from "./types";
 
-export { CONSENSUS_KINDS, SUPPORT_KINDS, tallyConsensus } from "./types";
+export { CONSENSUS_KINDS, METHOD_VERSION, SUPPORT_KINDS, tallyConsensus } from "./types";
 export type {
   Consensus,
+  ControlResult,
+  ControlRun,
+  CoverageEnvelope,
   LookupResult,
   PinFinding,
   QuoteFinding,
@@ -37,6 +41,11 @@ export const CONTROLS = {
   positive: "Richardson v. McKnight, 521 U.S. 399 (1997)",
   negative: "In re Leman, 66 Cal.App.5th 200",
 } as const;
+
+export const CONTROL_EXPECTATIONS = {
+  positive: "FOUND" as const satisfies Consensus,
+  negative: "NOT_FOUND" as const satisfies Consensus,
+};
 
 export const EXAMPLES = [
   CONTROLS.positive,
@@ -190,6 +199,55 @@ export interface VerifyRequestItem {
   passages?: string[];
 }
 
+function methodologyBlock(): VerifyResponse["methodology"] {
+  return {
+    version: METHOD_VERSION,
+    sources: [
+      "CourtListener /api/rest/v4/search/",
+      "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
+    ],
+    reference:
+      "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument.",
+    controls: {
+      positive: CONTROLS.positive,
+      negative: CONTROLS.negative,
+      expected: {
+        positive: CONTROL_EXPECTATIONS.positive,
+        negative: CONTROL_EXPECTATIONS.negative,
+      },
+    },
+  };
+}
+
+/** Run the method's positive/negative controls and record pass/fail. */
+export async function runMethodControls(): Promise<ControlRun> {
+  const [positive, negative] = await Promise.all([
+    lookupOneSafe(CONTROLS.positive),
+    lookupOneSafe(CONTROLS.negative),
+  ]);
+  const results = [
+    {
+      role: "positive" as const,
+      citation: CONTROLS.positive,
+      expected: CONTROL_EXPECTATIONS.positive,
+      actual: positive.consensus,
+      ok: positive.consensus === CONTROL_EXPECTATIONS.positive,
+    },
+    {
+      role: "negative" as const,
+      citation: CONTROLS.negative,
+      expected: CONTROL_EXPECTATIONS.negative,
+      actual: negative.consensus,
+      ok: negative.consensus === CONTROL_EXPECTATIONS.negative,
+    },
+  ];
+  return {
+    runAt: new Date().toISOString(),
+    results,
+    ok: results.every((r) => r.ok),
+  };
+}
+
 export async function lookupOneSafe(
   citation: string,
   passages: string[] = [],
@@ -209,6 +267,7 @@ export async function lookupOneSafe(
       matchedName: "",
       matchedCitations: [],
       support: { verdict: "UNCHECKED", quotes: [], pin: null },
+      checkedAt: new Date().toISOString(),
       error: `Lookup failed for this citation: ${reason}`,
     };
   }
@@ -241,6 +300,7 @@ export async function lookupOne(
   result.sources.push(cl, cap);
   applyConsensus(result);
   result.support = await evaluateSupport(citation, result, passages);
+  result.checkedAt = new Date().toISOString();
   return result;
 }
 
@@ -275,6 +335,7 @@ export function parseCitationInput(raw: string): string[] {
 
 export async function verifyCitationItems(
   items: VerifyRequestItem[],
+  options: { includeControlRun?: boolean } = {},
 ): Promise<VerifyResponse> {
   if (!items.length) {
     throw new Error("Provide at least one citation to verify.");
@@ -282,6 +343,11 @@ export async function verifyCitationItems(
   if (items.length > 25) {
     throw new Error("Verify at most 25 citations per request.");
   }
+
+  // Off by default: clients that batch lookups would otherwise re-run the
+  // control pair on every slice. Ask once per session when stamping a report.
+  const includeControlRun = options.includeControlRun === true;
+  const controlPromise = includeControlRun ? runMethodControls() : null;
 
   const results: LookupResult[] = [];
   for (const item of items) {
@@ -295,28 +361,26 @@ export async function verifyCitationItems(
   }
 
   const counts = tallyConsensus(results);
+  const controlRun = controlPromise ? await controlPromise : undefined;
 
   return {
     generatedAt: new Date().toISOString(),
-    methodology: {
-      sources: [
-        "CourtListener /api/rest/v4/search/",
-        "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
-      ],
-      reference:
-        "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument.",
-      controls: {
-        positive: CONTROLS.positive,
-        negative: CONTROLS.negative,
-      },
-    },
+    methodVersion: METHOD_VERSION,
+    methodology: methodologyBlock(),
+    controlRun,
     resultCount: results.length,
     counts,
     results,
   };
 }
 
-export async function verifyCitations(raw: string): Promise<VerifyResponse> {
+export async function verifyCitations(
+  raw: string,
+  options: { includeControlRun?: boolean } = {},
+): Promise<VerifyResponse> {
   const cites = parseCitationInput(raw);
-  return verifyCitationItems(cites.map((citation) => ({ citation })));
+  return verifyCitationItems(
+    cites.map((citation) => ({ citation })),
+    options,
+  );
 }

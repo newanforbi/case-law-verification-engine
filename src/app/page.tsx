@@ -91,15 +91,16 @@ export default function Home() {
               Sources that work
             </h2>
             <p className="mt-3 text-base leading-relaxed text-parchment-dim">
-              Citeproof probes only sources that answer without a login.
-              Justia, Scholar, CAP JSON API, and CourtListener citation-lookup
-              stay out of the path — blocked or auth-gated.
+              Citeproof probes CourtListener and CAP without requiring end users
+              to log in. Justia, Scholar, and the CAP JSON API stay out of the
+              path — blocked or auth-gated. An optional server-side
+              CourtListener token enables citation-lookup; otherwise search is used.
             </p>
           </div>
           <div className="mt-8 grid gap-6 md:grid-cols-2">
             <SourceBlock
               name="CourtListener"
-              detail="Unauthenticated /api/rest/v4/search/ — opinion search by reporter pin or WL number."
+              detail="citation-lookup when COURTLISTENER_API_TOKEN is set; otherwise unauthenticated /search/ by reporter pin or WL number."
             />
             <SourceBlock
               name="Caselaw Access Project"

@@ -110,8 +110,8 @@ Notes for a clean deploy:
 - **Fluid compute** should stay enabled (Hobby max duration is 300s with Fluid)
 - **PDF uploads capped at 40 MB** — files over ~4 MB use Vercel Blob (create a
   Blob store in the project; token is injected as `BLOB_READ_WRITE_TOKEN`)
-- **OCR** needs the higher memory on `/api/verify-pdf` and network egress to fetch
-  tesseract language data on cold start (cached under `/tmp` afterward)
+- **OCR** needs network egress to fetch tesseract language data on cold start
+  (cached under `/tmp` afterward)
 - No secrets required; CourtListener search + CAP `static.case.law` are unauthenticated
 - Region pinned to `iad1` in `vercel.json` (change if you prefer)
 

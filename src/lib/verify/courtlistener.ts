@@ -1,3 +1,4 @@
+import { envelopeForReporter } from "./coverage";
 import { httpGet } from "./http";
 import { namesCompatible, normalizeName } from "./names";
 import { parseReporter, WL_RE } from "./reporters";
@@ -13,6 +14,10 @@ type ClResult = {
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function stamp(hit: Omit<SourceHit, "checkedAt">): SourceHit {
+  return { ...hit, checkedAt: new Date().toISOString() };
 }
 
 export async function lookupCourtListener(
@@ -98,7 +103,7 @@ export async function lookupCourtListener(
       else if (!rep && !wl && nameMatch) accept = true;
 
       if (accept) {
-        const hit: SourceHit = {
+        const hit = stamp({
           source: "courtlistener",
           outcome: "FOUND",
           found: true,
@@ -106,9 +111,13 @@ export async function lookupCourtListener(
           caseName: name,
           citations: cites,
           coverage: "CourtListener returned an opinion matching this pin.",
+          envelope: envelopeForReporter(rep, {
+            inCorpus: true,
+            reason: "carried",
+          }),
           notes: `Search q=${JSON.stringify(q)}; cite_match=${citeMatch}; wl_match=${wlMatch}; name_match=${nameMatch}`,
           httpStatus: 200,
-        };
+        });
         if ((citeMatch || wlMatch) && nameMatch) return hit;
         // Prefer a pin match over a name-only fallback. Notes use JS booleans
         // (`false`), so older checks for `False` never fired and ranking was dead.
@@ -128,25 +137,33 @@ export async function lookupCourtListener(
   if (best) return best;
 
   if (!tried.length) {
-    return {
+    return stamp({
       source: "courtlistener",
       outcome: "OUT_OF_SCOPE",
       found: false,
       coverage:
         "Nothing queryable in this citation — no reporter pin, Westlaw pin, or caption to search on.",
-    };
+      envelope: envelopeForReporter(rep, {
+        inCorpus: null,
+        reason: "no_pin",
+      }),
+    });
   }
 
   if (!anySearchSucceeded) {
-    return {
+    return stamp({
       source: "courtlistener",
       outcome: "UNAVAILABLE",
       found: false,
       url: CL_SEARCH,
       httpStatus: lastStatus,
       coverage: `No CourtListener search completed (last status ${lastStatus}); this citation was not actually checked against it.`,
+      envelope: envelopeForReporter(rep, {
+        inCorpus: null,
+        reason: "unreachable",
+      }),
       notes: `Queries attempted: ${JSON.stringify(tried)}`,
-    };
+    });
   }
 
   // A search that ran and came back empty only means something where
@@ -154,18 +171,22 @@ export async function lookupCourtListener(
   // parses; it indexes Westlaw pins only for opinions it already holds, so a
   // Westlaw-only citation missing here is uninformative.
   if (rep) {
-    return {
+    return stamp({
       source: "courtlistener",
       outcome: "ABSENT",
       found: false,
       url: CL_SEARCH,
       httpStatus: 200,
       coverage: `CourtListener carries ${rep.label}, and a search for this pin returned no matching opinion.`,
+      envelope: envelopeForReporter(rep, {
+        inCorpus: true,
+        reason: "searched_empty",
+      }),
       notes: `No cite/name match in queries ${JSON.stringify(tried)}`,
-    };
+    });
   }
 
-  return {
+  return stamp({
     source: "courtlistener",
     outcome: "OUT_OF_SCOPE",
     found: false,
@@ -173,6 +194,10 @@ export async function lookupCourtListener(
     httpStatus: 200,
     coverage:
       "CourtListener indexes Westlaw numbers only for opinions already in its corpus, so an unpublished Westlaw-only citation missing here is not evidence of anything.",
+    envelope: envelopeForReporter(null, {
+      inCorpus: false,
+      reason: "westlaw_only",
+    }),
     notes: `No cite/name match in queries ${JSON.stringify(tried)}`,
-  };
+  });
 }

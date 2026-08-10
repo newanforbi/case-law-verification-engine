@@ -3,17 +3,21 @@
 import { startTransition, useRef, useState } from "react";
 import type {
   Consensus,
+  ControlRun,
   LookupResult,
   QuoteMatch,
   SourceOutcome,
   Support,
   VerifyResponse,
 } from "@/lib/verify";
+import { reportToWordHtml, reportWordFileName } from "@/lib/report/export-word";
 import { buildReport, reportFileName } from "@/lib/report/report";
 import {
   CONSENSUS_KINDS,
+  CONTROL_EXPECTATIONS,
   CONTROLS,
   EXAMPLES,
+  METHOD_VERSION,
   tallyConsensus,
   MAX_PDF_BYTES,
   MAX_PDF_LABEL,
@@ -181,11 +185,55 @@ export function Verifier() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  function emptyMethodology(): VerifyResponse["methodology"] {
+    return {
+      version: METHOD_VERSION,
+      sources: [
+        "CourtListener /api/rest/v4/search/",
+        "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
+      ],
+      reference: "",
+      controls: {
+        positive: CONTROLS.positive,
+        negative: CONTROLS.negative,
+        expected: {
+          positive: CONTROL_EXPECTATIONS.positive,
+          negative: CONTROL_EXPECTATIONS.negative,
+        },
+      },
+    };
+  }
+
+  async function fetchControlRun(): Promise<{
+    controlRun?: ControlRun;
+    methodology?: VerifyResponse["methodology"];
+    methodVersion?: string;
+  }> {
+    try {
+      const res = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ controlsOnly: true }),
+      });
+      const body = await readJson<VerifyResponse>(res, "Method controls failed");
+      if (!res.ok) return {};
+      return {
+        controlRun: body.controlRun,
+        methodology: body.methodology,
+        methodVersion: body.methodVersion,
+      };
+    } catch {
+      return {};
+    }
+  }
+
   async function verifyInBatches(
     items: VerifyItemPayload[],
     base: Partial<PdfVerifyResponse> = {},
   ) {
     const collected: LookupResult[] = [];
+    // One control pair for the whole session — travels with the report.
+    const controls = await fetchControlRun();
     for (let i = 0; i < items.length; i += VERIFY_BATCH) {
       const slice = items.slice(i, i + VERIFY_BATCH);
       setProgress({ done: i, total: items.length });
@@ -206,7 +254,9 @@ export function Verifier() {
       startTransition(() =>
         setData({
           generatedAt: batch.generatedAt,
-          methodology: batch.methodology,
+          methodVersion: controls.methodVersion ?? batch.methodVersion ?? METHOD_VERSION,
+          methodology: controls.methodology ?? batch.methodology ?? emptyMethodology(),
+          controlRun: controls.controlRun,
           ...base,
           verified: true,
           results: snapshot,
@@ -240,11 +290,8 @@ export function Verifier() {
       startTransition(() =>
         setData({
           generatedAt: new Date().toISOString(),
-          methodology: {
-            sources: [],
-            reference: "",
-            controls: { positive: CONTROLS.positive, negative: CONTROLS.negative },
-          },
+          methodVersion: METHOD_VERSION,
+          methodology: emptyMethodology(),
           resultCount: 0,
           counts: tallyConsensus([]),
           results: [],
@@ -566,14 +613,12 @@ function ReportBar({
       : undefined,
   });
 
-  function download() {
-    const blob = new Blob([JSON.stringify(report, null, 2)], {
-      type: "application/json",
-    });
+  function downloadBlob(contents: string, type: string, name: string) {
+    const blob = new Blob([contents], { type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = reportFileName(report);
+    a.download = name;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -581,17 +626,40 @@ function ReportBar({
   return (
     <div className="no-print mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] pt-4">
       <p className="text-xs text-parchment-dim">
-        Report <span className="text-brass">{report.id}</span> · generated{" "}
+        Report <span className="text-brass">{report.id}</span> · method{" "}
+        <span className="text-brass">{report.methodVersion}</span> · generated{" "}
         {new Date(report.generatedAt).toLocaleString()} · {report.summary.citations}{" "}
         authorit{report.summary.citations === 1 ? "y" : "ies"}
+        {report.controlRun
+          ? ` · controls ${report.controlRun.ok ? "pass" : "fail"}`
+          : ""}
       </p>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={download}
+          onClick={() =>
+            downloadBlob(
+              JSON.stringify(report, null, 2),
+              "application/json",
+              reportFileName(report),
+            )
+          }
           className="rounded-sm border border-[var(--line)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-parchment-dim transition hover:border-brass hover:text-brass"
         >
           Download JSON
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            downloadBlob(
+              reportToWordHtml(report),
+              "application/msword",
+              reportWordFileName(report),
+            )
+          }
+          className="rounded-sm border border-[var(--line)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-parchment-dim transition hover:border-brass hover:text-brass"
+        >
+          Download for Word
         </button>
         <button
           type="button"
@@ -621,7 +689,8 @@ function PrintHeader({ data }: { data: PdfVerifyResponse }) {
     <div className="print-only">
       <h1>Citation verification report</h1>
       <p>
-        Report {report.id} · generated {new Date(report.generatedAt).toISOString()}
+        Report {report.id} · method {report.methodVersion} · generated{" "}
+        {new Date(report.generatedAt).toISOString()}
         {report.document ? ` · ${report.document.fileName} (${report.document.pageCount} pp.)` : ""}
       </p>
       <p>
@@ -633,8 +702,13 @@ function PrintHeader({ data }: { data: PdfVerifyResponse }) {
       <p>Sources: {(report.methodology.sources ?? []).join("; ")}</p>
       {report.methodology.controls ? (
         <p>
-          Method controls: {report.methodology.controls.positive} (must resolve);{" "}
-          {report.methodology.controls.negative} (must not resolve)
+          Method controls: {report.methodology.controls.positive} (expect{" "}
+          {report.methodology.controls.expected.positive});{" "}
+          {report.methodology.controls.negative} (expect{" "}
+          {report.methodology.controls.expected.negative})
+          {report.controlRun
+            ? ` · run ${report.controlRun.ok ? "passed" : "FAILED"} at ${report.controlRun.runAt}`
+            : ""}
         </p>
       ) : null}
       <ul>

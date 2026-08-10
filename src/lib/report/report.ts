@@ -11,18 +11,22 @@
  */
 import type {
   Consensus,
+  ControlRun,
+  CoverageEnvelope,
   LookupResult,
   PinFinding,
   QuoteFinding,
   Support,
   VerifyResponse,
 } from "@/lib/verify";
-import { CONSENSUS_KINDS, SUPPORT_KINDS } from "@/lib/verify/types";
+import { CONSENSUS_KINDS, METHOD_VERSION, SUPPORT_KINDS } from "@/lib/verify/types";
 
 export interface ReportSource {
   source: string;
   outcome: string;
   coverage: string;
+  envelope?: CoverageEnvelope;
+  checkedAt?: string;
   url?: string;
 }
 
@@ -34,6 +38,7 @@ export interface ReportRecord {
   existence: Consensus;
   support: Support;
   matchedCaption: string;
+  checkedAt?: string;
   sources: ReportSource[];
   quotes: QuoteFinding[];
   pin: PinFinding | null;
@@ -42,9 +47,12 @@ export interface ReportRecord {
 export interface VerificationReport {
   id: string;
   generatedAt: string;
+  methodVersion: string;
   tool: string;
   document?: { fileName: string; pageCount: number };
   methodology: VerifyResponse["methodology"];
+  /** Live control-pair results, when they were run for this artifact. */
+  controlRun?: ControlRun;
   summary: {
     citations: number;
     existence: Record<Consensus, number>;
@@ -81,10 +89,13 @@ function toRecord(r: LookupResult): ReportRecord {
     existence: r.consensus,
     support: r.support.verdict,
     matchedCaption: r.matchedName,
+    checkedAt: r.checkedAt,
     sources: r.sources.map((s) => ({
       source: s.source,
       outcome: s.outcome,
       coverage: s.coverage,
+      envelope: s.envelope,
+      checkedAt: s.checkedAt,
       url: s.url,
     })),
     quotes: r.support.quotes,
@@ -99,7 +110,7 @@ function toRecord(r: LookupResult): ReportRecord {
  * happened, so a reader can tell an unqualified pass from one with holes in
  * it, and so nobody mistakes a citation nothing could reach for a cleared one.
  */
-function caveatsFor(records: ReportRecord[]): string[] {
+function caveatsFor(records: ReportRecord[], controlRun?: ControlRun): string[] {
   const out: string[] = [
     "We check what the opinion says, not whether it supports the argument. A case can be real, correctly quoted, and still not carry the weight the filing places on it.",
   ];
@@ -136,14 +147,45 @@ function caveatsFor(records: ReportRecord[]): string[] {
     );
   }
 
+  if (controlRun && !controlRun.ok) {
+    out.push(
+      "Method controls did not both pass on this run — treat every verdict below as provisional until the control pair resolves as expected.",
+    );
+  }
+
   return out;
+}
+
+function defaultMethodology(
+  data: VerifyResponse,
+): VerifyResponse["methodology"] {
+  const controls = data.methodology?.controls;
+  return {
+    version: data.methodology?.version ?? data.methodVersion ?? METHOD_VERSION,
+    sources: data.methodology?.sources ?? [],
+    reference: data.methodology?.reference ?? "",
+    controls: {
+      positive: controls?.positive ?? "",
+      negative: controls?.negative ?? "",
+      expected: controls?.expected ?? {
+        positive: "FOUND",
+        negative: "NOT_FOUND",
+      },
+    },
+  };
 }
 
 export function buildReport(
   data: VerifyResponse,
-  extra: { document?: { fileName: string; pageCount: number }; tool?: string } = {},
+  extra: {
+    document?: { fileName: string; pageCount: number };
+    tool?: string;
+    controlRun?: ControlRun;
+  } = {},
 ): VerificationReport {
   const records = data.results.map(toRecord);
+  const controlRun = extra.controlRun ?? data.controlRun;
+  const methodology = defaultMethodology(data);
 
   const existence = emptyTally(CONSENSUS_KINDS);
   const support = emptyTally(SUPPORT_KINDS);
@@ -154,18 +196,22 @@ export function buildReport(
 
   const body = {
     generatedAt: data.generatedAt,
-    records: records.map((r) => [r.citation, r.existence, r.support]),
+    methodVersion: data.methodVersion ?? methodology.version,
+    records: records.map((r) => [r.citation, r.existence, r.support, r.checkedAt]),
+    controlOk: controlRun?.ok ?? null,
   };
 
   return {
     id: digest(JSON.stringify(body)),
     generatedAt: data.generatedAt,
+    methodVersion: data.methodVersion ?? methodology.version ?? METHOD_VERSION,
     tool: extra.tool ?? "Citeproof",
     document: extra.document,
-    methodology: data.methodology,
+    methodology,
+    controlRun,
     summary: { citations: records.length, existence, support },
     records,
-    caveats: caveatsFor(records),
+    caveats: caveatsFor(records, controlRun),
   };
 }
 

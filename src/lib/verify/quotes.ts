@@ -71,16 +71,43 @@ function normalizeForAltered(s: string): string {
     .trim();
 }
 
-/** Quoted passages in a line, straight or curly, longest run wins. */
+/**
+ * Quoted passages in a line — straight, curly, guillemets, and single-quoted
+ * runs that look like quotations (not possessives). Longest / first unique
+ * wins; nested opener/closer pairs are preferred over greedy mid-quote cuts.
+ */
 export function extractQuotedPassages(line: string): string[] {
   const out: string[] = [];
-  const patterns = [/"([^"]{4,})"/g, /“([^”]{4,})”/g];
+  const seen = new Set<string>();
+
+  const push = (raw: string) => {
+    const passage = raw.replace(/\s+/g, " ").trim();
+    if (passage.length < 4) return;
+    const key = passage.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(passage);
+  };
+
+  const patterns = [
+    /"([^"]{4,})"/g,
+    /“([^”]{4,})”/g,
+    /«([^»]{4,})»/g,
+    // Single quotes used as doubles: 'private prison guards'
+    /(?<![A-Za-z])'([^']{4,})'(?![A-Za-z])/g,
+    /‘([^’]{4,})’/g,
+  ];
   for (const re of patterns) {
     for (const m of line.matchAll(re)) {
-      const passage = m[1].trim();
-      if (passage) out.push(passage);
+      push(m[1]);
     }
   }
+
+  // Parenthetical quote after a cite: ("private prison guards").
+  for (const m of line.matchAll(/\(\s*[“"']([^”"']{4,})[”"']\s*\)/g)) {
+    push(m[1]);
+  }
+
   return out;
 }
 

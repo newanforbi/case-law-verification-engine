@@ -1,6 +1,14 @@
+import type { CoverageEnvelope } from "./coverage";
 import type { QuoteFinding } from "./quotes";
 
 export type { QuoteFinding, QuoteMatch, PinCite } from "./quotes";
+export type { CoverageEnvelope, CoverageReason, Jurisdiction } from "./coverage";
+
+/**
+ * Method identity stamped into every verify response and exportable report.
+ * Bump when consensus rules, quote matching, or coverage semantics change.
+ */
+export const METHOD_VERSION = "2026.08.1";
 
 /**
  * Every verdict, in the order a reader should scan them. Declared here, in the
@@ -51,6 +59,10 @@ export interface SourceHit {
   found: boolean;
   /** Why this source could or could not speak to the citation. */
   coverage: string;
+  /** Structured form of `coverage` for tooling and exports. */
+  envelope?: CoverageEnvelope;
+  /** When this source finished answering for this citation. */
+  checkedAt?: string;
   url?: string;
   caseName?: string;
   citations?: string[];
@@ -100,17 +112,47 @@ export interface LookupResult {
   matchedName: string;
   matchedCitations: string[];
   support: SupportReport;
+  /** When both sources finished and the verdict was assigned. */
+  checkedAt?: string;
   /** Set only when the lookup itself failed, rather than the citation. */
   error?: string;
 }
 
+export interface ControlSpec {
+  citation: string;
+  expected: Consensus;
+}
+
+export interface ControlResult {
+  role: "positive" | "negative";
+  citation: string;
+  expected: Consensus;
+  actual: Consensus;
+  ok: boolean;
+}
+
+export interface ControlRun {
+  runAt: string;
+  results: ControlResult[];
+  /** True when both controls matched their expected verdicts. */
+  ok: boolean;
+}
+
 export interface VerifyResponse {
   generatedAt: string;
+  methodVersion: string;
   methodology: {
+    version: string;
     sources: string[];
     reference: string;
-    controls: { positive: string; negative: string };
+    controls: {
+      positive: string;
+      negative: string;
+      expected: { positive: Consensus; negative: Consensus };
+    };
   };
+  /** Live control-pair results for this run, when they were executed. */
+  controlRun?: ControlRun;
   resultCount: number;
   counts: Record<Consensus, number>;
   results: LookupResult[];

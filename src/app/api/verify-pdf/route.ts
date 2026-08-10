@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { extractCitationsFromPages } from "@/lib/citations/extract";
 import { extractPdfText } from "@/lib/pdf/extract";
 import {
+  CONTROL_EXPECTATIONS,
   CONTROLS,
+  METHOD_VERSION,
   lookupOneSafe,
+  runMethodControls,
   tallyConsensus,
   type LookupResult,
   type VerifyResponse,
@@ -87,11 +90,16 @@ export async function POST(request: Request) {
 
     const verifyItems: VerifyItem[] = cites.verifyItems;
     const results: LookupResult[] = [];
+    // Stamp the method controls once alongside the filing — they travel with
+    // the exportable report so a later reader can see the method still held.
+    const controlPromise =
+      verifyFlag && verifyItems.length ? runMethodControls() : null;
     if (verifyFlag && verifyItems.length) {
       for (const item of verifyItems) {
         results.push(await lookupOneSafe(item.citation, item.passages));
       }
     }
+    const controlRun = controlPromise ? await controlPromise : undefined;
 
     const counts = tallyConsensus(results);
 
@@ -100,18 +108,29 @@ export async function POST(request: Request) {
       ["authority", "case_reporter", "case_westlaw", "case_name"].includes(c.kind),
     );
 
+    // methodVersion is present even on extract-only responses so deploy smoke
+    // and clients can pin the method without forcing a full verify.
     return NextResponse.json({
       generatedAt: new Date().toISOString(),
+      methodVersion: METHOD_VERSION,
       methodology: {
+        version: METHOD_VERSION,
         sources: [
           "CourtListener /api/rest/v4/search/",
           "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
         ],
         reference:
           "PDF extract + citation pairing, then coverage-aware existence probe and quote checking via CourtListener + CAP static.case.law. We check what the opinion says, not whether it supports the argument.",
-        // The report renders these, and this route used to omit them.
-        controls: { positive: CONTROLS.positive, negative: CONTROLS.negative },
+        controls: {
+          positive: CONTROLS.positive,
+          negative: CONTROLS.negative,
+          expected: {
+            positive: CONTROL_EXPECTATIONS.positive,
+            negative: CONTROL_EXPECTATIONS.negative,
+          },
+        },
       } satisfies VerifyResponse["methodology"],
+      controlRun,
       extractionMethod:
         "pdf-parse text layer → reporter/Westlaw + case-name pairing → quote harvest → coverage-aware verify",
       document: {

@@ -75,11 +75,15 @@ curl -s -X POST http://localhost:3000/api/verify-pdf \
 ```
 
 ```bash
-npm run test:unit          # parser + consensus + quotes + report + extract
+npm run test:unit          # parser + consensus + quotes + report + regression pack
 npm run test:controls      # live Richardson(+) / Leman(−)
 npm run test:pdf           # sample pleading PDF → extract → verify controls
+npm run test:smoke         # POST fixture PDF to /api/verify-pdf (needs a running server)
 npm run build
 ```
+
+Reports carry `methodVersion`, per-source `checkedAt`, structured coverage envelopes,
+live control-pair results, and can be downloaded as JSON or Word-compatible `.doc`.
 
 ## Deploy (Vercel)
 

@@ -1,3 +1,4 @@
+import { envelopeForReporter } from "./coverage";
 import { httpGet } from "./http";
 import { namesCompatible } from "./names";
 import { parseReporter } from "./reporters";
@@ -83,41 +84,57 @@ async function loadCapVolume(slug: string, volume: string): Promise<VolumeLoad> 
   return load;
 }
 
+function stamp(hit: Omit<SourceHit, "checkedAt">): SourceHit {
+  return { ...hit, checkedAt: new Date().toISOString() };
+}
+
 export async function lookupCap(citation: string, nameGuess: string): Promise<SourceHit> {
   const rep = parseReporter(citation);
   if (!rep) {
-    return {
+    return stamp({
       source: "case.law_static",
       outcome: "OUT_OF_SCOPE",
       found: false,
       coverage:
         "CAP static is addressed by reporter volume and page; this citation has no supported reporter pin to resolve.",
-    };
+      envelope: envelopeForReporter(null, {
+        inCorpus: false,
+        reason: citation.match(/\bWL\b/i) ? "westlaw_only" : "unsupported_form",
+      }),
+    });
   }
 
   const metaUrl = `${CAP_STATIC}/${rep.slug}/${rep.volume}/CasesMetadata.json`;
   const load = await loadCapVolume(rep.slug, rep.volume);
 
   if (load.state === "absent-volume") {
-    return {
+    return stamp({
       source: "case.law_static",
       outcome: "OUT_OF_SCOPE",
       found: false,
       url: metaUrl,
       httpStatus: load.status,
       coverage: `CAP has no volume ${rep.volume} of ${rep.label} — outside its digitized run, so it cannot speak to this citation either way.`,
-    };
+      envelope: envelopeForReporter(rep, {
+        inCorpus: false,
+        reason: "absent_volume",
+      }),
+    });
   }
 
   if (load.state === "unavailable") {
-    return {
+    return stamp({
       source: "case.law_static",
       outcome: "UNAVAILABLE",
       found: false,
       url: metaUrl,
       httpStatus: load.status,
       coverage: `Could not read CAP volume metadata for ${rep.slug}/${rep.volume} (status ${load.status}); this citation was not actually checked against CAP.`,
-    };
+      envelope: envelopeForReporter(rep, {
+        inCorpus: null,
+        reason: "unreachable",
+      }),
+    });
   }
 
   const page = String(rep.page);
@@ -128,15 +145,19 @@ export async function lookupCap(citation: string, nameGuess: string): Promise<So
     : undefined;
 
   if (!chosen) {
-    return {
+    return stamp({
       source: "case.law_static",
       outcome: "ABSENT",
       found: false,
       url: metaUrl,
       httpStatus: 200,
       coverage: `CAP carries volume ${rep.volume} of ${rep.label}, so this volume was searched in full.`,
+      envelope: envelopeForReporter(rep, {
+        inCorpus: true,
+        reason: "searched_empty",
+      }),
       notes: `No case begins at page ${page} in CAP volume ${rep.slug}/${rep.volume}`,
-    };
+    });
   }
 
   const cites = (chosen.citations || []).map((x) => x.cite || "").filter(Boolean);
@@ -150,7 +171,7 @@ export async function lookupCap(citation: string, nameGuess: string): Promise<So
     notes += `; caption mismatch vs query name (${JSON.stringify(nameGuess)} vs ${JSON.stringify(name)})`;
   }
 
-  return {
+  return stamp({
     source: "case.law_static",
     outcome: "FOUND",
     found: true,
@@ -158,7 +179,11 @@ export async function lookupCap(citation: string, nameGuess: string): Promise<So
     caseName: name,
     citations: cites,
     coverage: `CAP carries volume ${rep.volume} of ${rep.label}.`,
+    envelope: envelopeForReporter(rep, {
+      inCorpus: true,
+      reason: "carried",
+    }),
     notes,
     httpStatus: 200,
-  };
+  });
 }

@@ -25,6 +25,8 @@ async function main() {
   ) as {
     mustIncludeInQueue: string[];
     mustHarvestPassages: Record<string, string[]>;
+    mustHarvestPropositions?: Record<string, string[]>;
+    mustPropositionRoles?: Record<string, string>;
     mustNotQueue: string[];
     minAuthorities: number;
     minLocalRules: number;
@@ -65,6 +67,28 @@ async function main() {
         `${needle} should harvest “${p}”`,
       );
     }
+  }
+
+  for (const [needle, snippets] of Object.entries(expected.mustHarvestPropositions ?? {})) {
+    const item = extracted.verifyItems.find((i) => i.citation.includes(needle));
+    assert.ok(item, `verifyItems missing ${needle} for propositions`);
+    for (const snippet of snippets) {
+      assert.ok(
+        item!.propositions.some((p) =>
+          p.text.toLowerCase().includes(snippet.toLowerCase()),
+        ),
+        `${needle} should harvest proposition containing “${snippet}”, got ${JSON.stringify(item!.propositions)}`,
+      );
+    }
+  }
+
+  for (const [needle, role] of Object.entries(expected.mustPropositionRoles ?? {})) {
+    const item = extracted.verifyItems.find((i) => i.citation.includes(needle));
+    assert.ok(item, `verifyItems missing ${needle} for role`);
+    assert.ok(
+      item!.propositions.some((p) => p.role === role),
+      `${needle} should have role ${role}, got ${JSON.stringify(item!.propositions)}`,
+    );
   }
 
   // Curly / single-quoted harvest.

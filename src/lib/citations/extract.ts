@@ -6,6 +6,9 @@
  */
 
 import { extractQuotedPassages } from "@/lib/verify/quotes";
+import type { Proposition, PropositionRole } from "@/lib/verify/types";
+
+export type { Proposition, PropositionRole };
 
 export type CiteKind =
   | "authority"
@@ -36,6 +39,8 @@ export interface VerifyItem {
   citation: string;
   /** Passages quoted in the filing near this authority. */
   passages: string[];
+  /** Prose propositions the filing attributes to (or aims at) this authority. */
+  propositions: Proposition[];
 }
 
 export interface CitationExtractionResult {
@@ -160,6 +165,10 @@ const CONTEXT_CHARS = 120;
  * and is clipped at the next authority on the same page.
  */
 const QUOTE_HARVEST_AFTER = 420;
+/** Look back for the rule-sentence that the cite is offered to support. */
+const PROP_HARVEST_BEFORE = 320;
+const PROP_HARVEST_AFTER = 220;
+const MAX_PROPOSITIONS = 3;
 
 function overlaps(
   claimed: Array<[number, number]>,
@@ -334,6 +343,20 @@ function nextAuthorityStart(
   return best;
 }
 
+function previousAuthorityEnd(
+  citations: ExtractedCitation[],
+  current: ExtractedCitation,
+): number | null {
+  let best: number | null = null;
+  for (const other of citations) {
+    if (other.kind !== "authority") continue;
+    if (other.page !== current.page) continue;
+    if (other.end > current.start) continue;
+    if (best === null || other.end > best) best = other.end;
+  }
+  return best;
+}
+
 function harvestPassages(
   citations: ExtractedCitation[],
   cite: string,
@@ -390,6 +413,160 @@ function harvestPassages(
   return passages;
 }
 
+function detectPropositionRole(leadIn: string): PropositionRole {
+  const head = leadIn.slice(0, Math.min(leadIn.length, 200));
+  if (
+    /\b(?:but\s+see|contra|contrast(?:ed|ing)?|distinguish(?:ed|ing|es)?|unlike|although\b[\s\S]{0,80}\b(?:held|concluded|found))\b/i.test(
+      head,
+    ) ||
+    /\banticipat(?:e|es|ing)\b/i.test(head) ||
+    /\b(?:cuts?\s+against|does\s+not\s+(?:control|apply|govern)|is\s+not\s+to\s+the\s+contrary)\b/i.test(
+      head,
+    )
+  ) {
+    return "anticipates_contrary";
+  }
+  if (/\b(?:cf\.?|compare)\b/i.test(head)) {
+    return "distinguishes";
+  }
+  return "supports";
+}
+
+/**
+ * Split prose into sentences without breaking on legal abbreviations (v., Cal.,
+ * U.S., App., etc.).
+ */
+function splitSentences(text: string): string[] {
+  // Mask short abbreviations so "v. Sparkman" / "U.S." / "Cal.App." don't split.
+  const masked = text.replace(/\b([A-Za-z]{1,4})\./g, "$1\uE000");
+  const parts = masked.split(/(?<=[.!?])\s+(?=[A-Z("“])|\n{2,}/);
+  return parts
+    .map((p) => tidy(p.replace(/\uE000/g, ".")))
+    .filter((p) => p.length >= 12);
+}
+
+function stripCitationScaffolding(sentence: string): string {
+  return tidy(
+    sentence
+      .replace(SIGNAL_PREFIX, "")
+      .replace(
+        /\b[A-Z][^,]{0,80},\s*\d{1,4}\s+(?:U\.?\s?S\.?|F\.|Cal\.)[^)]{0,60}\((?:19|20)\d{2}\)/g,
+        " ",
+      )
+      .replace(/\b\d{1,4}\s+(?:U\.?\s?S\.?|F\.|Cal\.)[^\s,]{0,40}\s+\d{1,4}(?:,\s*\d{1,5})?(?:\s*\((?:19|20)\d{2}\))?/gi, " ")
+      .replace(/\((?:19|20)\d{2}\)/g, " ")
+      .replace(/\s+/g, " "),
+  );
+}
+
+function looksLikeProposition(sentence: string): boolean {
+  const meat = stripCitationScaffolding(sentence);
+  if (meat.length < 28) return false;
+  return (
+    /\b(?:held|holding|requires?|must|may\s+not|creates?|establishes?|provides?|protects?|bars?|precludes?|immunity|due\s+process|jurisdiction|standing|standard|rule|principle|theory|cuts?\s+against|does\s+not\s+extend)\b/i.test(
+      meat,
+    ) || meat.length >= 48
+  );
+}
+
+/**
+ * Harvest the filing's claimed propositions around an authority — the prose
+ * the cite is offered to support (or distinguish / anticipate).
+ */
+export function harvestPropositions(
+  citations: ExtractedCitation[],
+  cite: string,
+  pageTextByPage: Map<number, string>,
+): Proposition[] {
+  const key = normalizeKey(cite);
+  const out: Proposition[] = [];
+  const seen = new Set<string>();
+
+  for (const c of citations) {
+    if (c.kind !== "authority") continue;
+    const ck = normalizeKey(c.citation);
+    if (ck !== key && !key.startsWith(ck) && !ck.startsWith(key)) continue;
+
+    const pageText = pageTextByPage.get(c.page) || "";
+    if (!pageText) continue;
+
+    // Stay between neighboring authorities so one cite cannot inherit another.
+    const prevEnd = previousAuthorityEnd(citations, c) ?? 0;
+    const nextStart = nextAuthorityStart(citations, c) ?? pageText.length;
+    const winStart = Math.max(prevEnd, c.start - PROP_HARVEST_BEFORE);
+    const winEnd = Math.min(nextStart, c.end + PROP_HARVEST_AFTER);
+    if (winEnd <= winStart) continue;
+
+    const before = tidy(pageText.slice(winStart, c.start));
+    const around = tidy(pageText.slice(winStart, Math.min(winEnd, c.end + 80)));
+    const after = tidy(pageText.slice(c.end, winEnd));
+    const role = detectPropositionRole(around || before);
+
+    const beforeSentences = splitSentences(before);
+    const afterSentences = splitSentences(after);
+    const aroundSentences = splitSentences(
+      tidy(pageText.slice(winStart, winEnd)),
+    );
+
+    const candidates: string[] = [];
+    const prev = beforeSentences[beforeSentences.length - 1];
+    if (prev && looksLikeProposition(prev)) candidates.push(prev);
+
+    const citeToken = c.citation.split(",")[0]?.slice(0, 32) || "";
+    const partyHint = citeToken.split(/\s+v\.?\s+/i)[0]?.slice(0, 16) || "";
+    const containing = aroundSentences.find(
+      (s) => partyHint && s.includes(partyHint),
+    );
+    if (containing && looksLikeProposition(containing)) {
+      candidates.push(containing);
+    }
+
+    // After the cite: only keep continuations (which/that…), not the next
+    // authority's lead-in sentence.
+    for (const s of afterSentences.slice(0, 2)) {
+      if (
+        /^(?:which|that|and|because|holding|so|thus|therefore|,)/i.test(s) &&
+        looksLikeProposition(s)
+      ) {
+        candidates.push(s);
+      }
+    }
+
+    for (let text of candidates) {
+      text = tidy(
+        text
+          .replace(
+            /^(?:POINTS AND AUTHORITIES|TABLE OF AUTHORITIES|ARGUMENT|INTRODUCTION)\s+/i,
+            "",
+          )
+          .replace(/^,\s*/, ""),
+      );
+      const pk = normalizeKey(text);
+      if (!pk || pk.length < 24 || seen.has(pk)) continue;
+      // Drop lines that are basically just the citation.
+      if (stripCitationScaffolding(text).length < 28) continue;
+      if (pk === normalizeKey(c.citation)) continue;
+      // Prefer the longer form when a fragment is already covered.
+      const dominated = [...seen].some(
+        (existing) => existing.includes(pk) && existing.length > pk.length,
+      );
+      if (dominated) continue;
+      for (const existing of [...seen]) {
+        if (pk.includes(existing) && pk.length > existing.length) {
+          seen.delete(existing);
+          const idx = out.findIndex((p) => normalizeKey(p.text) === existing);
+          if (idx >= 0) out.splice(idx, 1);
+        }
+      }
+      seen.add(pk);
+      out.push({ text, page: c.page, role });
+      if (out.length >= MAX_PROPOSITIONS) return out;
+    }
+  }
+
+  return out;
+}
+
 /** Build a verify queue: prefer paired authorities, then bare reporters / WL. */
 export function buildVerifyQueue(
   citations: ExtractedCitation[],
@@ -431,6 +608,7 @@ export function buildVerifyQueue(
   const items = sliced.map((citation) => ({
     citation,
     passages: harvestPassages(citations, citation, pageTextByPage),
+    propositions: harvestPropositions(citations, citation, pageTextByPage),
   }));
   return { queue: sliced, items };
 }

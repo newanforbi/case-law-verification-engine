@@ -63,6 +63,23 @@ export async function POST(request: Request) {
           passages: Array.isArray(item?.passages)
             ? item.passages.map((p) => String(p)).filter(Boolean).slice(0, 5)
             : [],
+          propositions: Array.isArray(item?.propositions)
+            ? item.propositions
+                .map((p) => ({
+                  text: String(p?.text ?? "").trim(),
+                  page:
+                    typeof p?.page === "number" && Number.isFinite(p.page)
+                      ? p.page
+                      : undefined,
+                  role:
+                    p?.role === "distinguishes" ||
+                    p?.role === "anticipates_contrary"
+                      ? p.role
+                      : ("supports" as const),
+                }))
+                .filter((p) => p.text.length >= 12)
+                .slice(0, 5)
+            : [],
         }))
         .filter((item) => item.citation);
       const result = await verifyCitationItems(items, { includeControlRun });

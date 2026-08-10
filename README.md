@@ -11,6 +11,8 @@ We check what the opinion says, not whether it supports your argument.
 
 Each result includes **open links**: primary URLs from CourtListener/CAP (or retrieved opinion text), plus constructed Justia / Library of Congress / Google Scholar references. Constructed links never affect the verdict.
 
+Filing uploads also harvest **propositions** — the prose claims tied to each authority (with a role cue: supports / distinguishes / anticipates contrary). These travel with verify batches for holding-use audit; they do not change existence verdicts.
+
 ## Existence verdicts
 
 | Status | Meaning |

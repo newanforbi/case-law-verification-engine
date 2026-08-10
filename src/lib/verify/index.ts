@@ -16,6 +16,7 @@ import type {
   ControlRun,
   LookupResult,
   PinFinding,
+  Proposition,
   Support,
   SupportReport,
   VerifyResponse,
@@ -29,6 +30,8 @@ export type {
   CoverageEnvelope,
   LookupResult,
   PinFinding,
+  Proposition,
+  PropositionRole,
   QuoteFinding,
   QuoteMatch,
   ReferenceLink,
@@ -205,6 +208,8 @@ export interface VerifyRequestItem {
   citation: string;
   /** Quoted passages from the filing to check against the opinion. */
   passages?: string[];
+  /** Filing propositions harvested near this authority (for holding audit). */
+  propositions?: Proposition[];
 }
 
 function methodologyBlock(): VerifyResponse["methodology"] {
@@ -215,7 +220,7 @@ function methodologyBlock(): VerifyResponse["methodology"] {
       "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
     ],
     reference:
-      "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument. Open links marked primary come from those voting sources (or retrieved opinion text); constructed Justia / LOC / Scholar links are references only and never affect the verdict.",
+      "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument. Filing propositions are harvested from surrounding prose (supports / distinguishes / anticipates contrary) for later holding-use audit; they do not change existence verdicts. Open links marked primary come from voting sources (or retrieved opinion text); constructed Justia / LOC / Scholar links are references only.",
     controls: {
       positive: CONTROLS.positive,
       negative: CONTROLS.negative,
@@ -259,9 +264,10 @@ export async function runMethodControls(): Promise<ControlRun> {
 export async function lookupOneSafe(
   citation: string,
   passages: string[] = [],
+  propositions: Proposition[] = [],
 ): Promise<LookupResult> {
   try {
-    return await lookupOne(citation, passages);
+    return await lookupOne(citation, passages, propositions);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     const rep = parseReporter(citation);
@@ -275,6 +281,7 @@ export async function lookupOneSafe(
       matchedName: "",
       matchedCitations: [],
       support: { verdict: "UNCHECKED", quotes: [], pin: null },
+      propositions,
       checkedAt: new Date().toISOString(),
       error: `Lookup failed for this citation: ${reason}`,
     });
@@ -284,6 +291,7 @@ export async function lookupOneSafe(
 export async function lookupOne(
   citation: string,
   passages: string[] = [],
+  propositions: Proposition[] = [],
 ): Promise<LookupResult> {
   const name = guessName(citation);
   const rep = parseReporter(citation);
@@ -298,6 +306,7 @@ export async function lookupOne(
     matchedName: "",
     matchedCitations: [],
     support: { verdict: "NO_QUOTE", quotes: [], pin: null },
+    propositions,
   };
 
   // Run both working sources in parallel.
@@ -361,7 +370,13 @@ export async function verifyCitationItems(
   for (const item of items) {
     const citation = item.citation.trim();
     if (!citation) continue;
-    results.push(await lookupOneSafe(citation, item.passages ?? []));
+    results.push(
+      await lookupOneSafe(
+        citation,
+        item.passages ?? [],
+        item.propositions ?? [],
+      ),
+    );
   }
 
   if (!results.length) {

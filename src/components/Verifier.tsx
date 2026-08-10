@@ -17,6 +17,10 @@ import type {
 } from "@/lib/verify";
 import { intakeFiling } from "@/lib/pdf/client-upload";
 import { filingFormatFromName } from "@/lib/filing/kinds";
+import {
+  auditSummaryToHtml,
+  buildAuditSummary,
+} from "@/lib/report/audit-summary";
 import { reportToWordHtml, reportWordFileName } from "@/lib/report/export-word";
 import { buildReport, reportFileName } from "@/lib/report/report";
 import {
@@ -684,7 +688,7 @@ export function Verifier() {
 
       {data && (
         <section id="results" className="mt-10 scroll-mt-8" aria-live="polite">
-          <PrintHeader data={data} />
+          <CompactAuditPrint data={data} />
           {progress && progress.total > 0 ? (
             <div className="no-print mb-5 border border-[var(--line)] bg-ink-lift/70 px-4 py-3">
               <p className="text-xs uppercase tracking-[0.12em] text-brass">
@@ -706,7 +710,7 @@ export function Verifier() {
             </div>
           ) : null}
           {data.document && data.extraction && (
-            <div className="mb-6 border border-[var(--line)] bg-ink-lift/70 px-4 py-4 md:px-5">
+            <div className="no-print mb-6 border border-[var(--line)] bg-ink-lift/70 px-4 py-4 md:px-5">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
                 Document
               </p>
@@ -778,7 +782,7 @@ export function Verifier() {
             </div>
           )}
 
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div className="no-print mb-5 flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="font-[family-name:var(--font-fraunces)] text-2xl text-parchment md:text-3xl">
                 Results
@@ -795,11 +799,11 @@ export function Verifier() {
           </div>
 
           {data.results.length === 0 ? (
-            <p className="text-sm text-parchment-dim">
+            <p className="no-print text-sm text-parchment-dim">
               No case-law authorities were queued for verification from this input.
             </p>
           ) : (
-            <ul className="space-y-4">
+            <ul className="no-print space-y-4">
               {data.results.map((r, i) => (
                 <li
                   key={`${r.query}-${i}`}
@@ -813,7 +817,7 @@ export function Verifier() {
           )}
 
           {(data.contraryClusters?.length ?? 0) > 0 ? (
-            <div className="mt-10">
+            <div className="no-print mt-10">
               <h2 className="font-[family-name:var(--font-fraunces)] text-2xl text-parchment md:text-3xl">
                 Contrary clusters
               </h2>
@@ -851,7 +855,7 @@ export function Verifier() {
           ) : null}
 
           {(data.statuteResults?.length ?? 0) > 0 ? (
-            <div className="mt-10">
+            <div className="no-print mt-10">
               <h2 className="font-[family-name:var(--font-fraunces)] text-2xl text-parchment md:text-3xl">
                 Statutes
               </h2>
@@ -894,10 +898,9 @@ export function Verifier() {
 /**
  * The report controls.
  *
- * JSON is the exact record — every outcome, coverage line and source URL, so a
- * later reader can reconstruct what was known. Print is the filable form: the
- * browser's own PDF export, which needs no server and no dependency, driven by
- * the print stylesheet.
+ * JSON / full Word keep the complete record. Print and the compact Word
+ * download are the one-page audit list — citation + verified status — so a
+ * filing attachment does not balloon into a multi-page source dump.
  */
 function ReportBar({
   data,
@@ -909,6 +912,7 @@ function ReportBar({
       ? { fileName: data.document.fileName, pageCount: data.document.pageCount }
       : undefined,
   });
+  const audit = buildAuditSummary(data);
 
   function downloadBlob(contents: string, type: string, name: string) {
     const blob = new Blob([contents], { type });
@@ -952,6 +956,22 @@ function ReportBar({
           type="button"
           onClick={() =>
             downloadBlob(
+              auditSummaryToHtml(audit, {
+                reportId: report.id,
+                documentName: data.document?.fileName,
+              }),
+              "application/msword",
+              reportWordFileName(report).replace(/\.doc$/i, "-audit.doc"),
+            )
+          }
+          className="rounded-sm border border-[var(--line)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-parchment-dim transition hover:border-brass hover:text-brass"
+        >
+          Download audit (Word)
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            downloadBlob(
               reportToWordHtml(report),
               "application/msword",
               reportWordFileName(report),
@@ -959,14 +979,14 @@ function ReportBar({
           }
           className="rounded-sm border border-[var(--line)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-parchment-dim transition hover:border-brass hover:text-brass"
         >
-          Download for Word
+          Download full (Word)
         </button>
         <button
           type="button"
           onClick={() => window.print()}
-          className="rounded-sm border border-[var(--line)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-parchment-dim transition hover:border-brass hover:text-brass"
+          className="rounded-sm border border-brass/40 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-brass transition hover:bg-brass/10"
         >
-          Print / Save as PDF
+          Print audit summary
         </button>
       </div>
     </div>
@@ -974,48 +994,69 @@ function ReportBar({
 }
 
 /**
- * The record's header, which only exists on paper. On screen the page already
- * says what this is; printed, the sheet has to stand on its own — when it was
- * run, against what, by what method, and what the method could not reach.
+ * Compact paper artifact — title, lead, cite/status rows, statutes line,
+ * closing. Screen UI stays detailed; this block is print-only.
  */
-function PrintHeader({ data }: { data: PdfVerifyResponse }) {
+function CompactAuditPrint({ data }: { data: PdfVerifyResponse }) {
   const report = buildReport(data, {
     document: data.document
       ? { fileName: data.document.fileName, pageCount: data.document.pageCount }
       : undefined,
   });
+  const audit = buildAuditSummary(data);
 
   return (
-    <div className="print-only">
-      <h1>Citation verification report</h1>
-      <p>
-        Report {report.id} · method {report.methodVersion} · generated{" "}
-        {new Date(report.generatedAt).toISOString()}
-        {report.document ? ` · ${report.document.fileName} (${report.document.pageCount} pp.)` : ""}
+    <div className="print-only audit-print">
+      <h1 className="audit-print-title">{audit.title}</h1>
+      <p className="audit-meta">
+        Citeproof · report {report.id} · method {report.methodVersion}
+        {data.document ? ` · ${data.document.fileName}` : ""}
       </p>
-      <p>
-        {report.summary.citations} authorit{report.summary.citations === 1 ? "y" : "ies"} checked ·{" "}
-        {CONSENSUS_KINDS.filter((k) => report.summary.existence[k] > 0)
-          .map((k) => `${report.summary.existence[k]} ${STATUS_LABEL[k].toLowerCase()}`)
-          .join(" · ")}
-      </p>
-      <p>Sources: {(report.methodology.sources ?? []).join("; ")}</p>
-      {report.methodology.controls ? (
-        <p>
-          Method controls: {report.methodology.controls.positive} (expect{" "}
-          {report.methodology.controls.expected.positive});{" "}
-          {report.methodology.controls.negative} (expect{" "}
-          {report.methodology.controls.expected.negative})
-          {report.controlRun
-            ? ` · run ${report.controlRun.ok ? "passed" : "FAILED"} at ${report.controlRun.runAt}`
-            : ""}
-        </p>
-      ) : null}
-      <ul>
-        {report.caveats.map((c, i) => (
-          <li key={i}>{c}</li>
-        ))}
-      </ul>
+      <p className="audit-lead">{audit.lead}</p>
+
+      <h2 className="audit-print-h">Verified Citations</h2>
+      <p className="audit-print-sub">Citation Verification</p>
+      <table className="audit-table">
+        <tbody>
+          {audit.rows.length === 0 ? (
+            <tr>
+              <td colSpan={2}>No case-law authorities in this audit.</td>
+            </tr>
+          ) : (
+            audit.rows.map((r, i) => (
+              <tr key={`${r.citation}-${i}`}>
+                <td className="audit-cite">
+                  {r.caseName ? (
+                    <>
+                      <em>{r.caseName}</em>
+                      {r.reporterPart ? `, ${r.reporterPart}` : ""}
+                    </>
+                  ) : (
+                    r.citation
+                  )}
+                </td>
+                <td className="audit-status">
+                  <span className={`audit-mark audit-mark-${r.status}`}>
+                    {r.status === "verified"
+                      ? "✓"
+                      : r.status === "not_found"
+                        ? "✗"
+                        : "·"}{" "}
+                    {r.label}
+                    {r.wellEstablished ? (
+                      <span className="audit-note"> (well-established)</span>
+                    ) : null}
+                  </span>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+
+      {audit.statuteLine ? <p className="audit-statutes">{audit.statuteLine}</p> : null}
+      <h2 className="audit-print-h audit-closing-title">{audit.closingTitle}</h2>
+      <p className="audit-closing">{audit.closing}</p>
     </div>
   );
 }

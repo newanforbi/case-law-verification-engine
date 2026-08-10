@@ -68,17 +68,22 @@ export async function POST(request: Request) {
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
+    // Text layer first; scanned image-only filings fall through to OCR.
     const extracted = await extractPdfText(bytes, name);
 
     if (!extracted.hasTextLayer) {
       return NextResponse.json(
         {
           error:
-            "This PDF has little or no extractable text. Scanned image-only PDFs need OCR before citation detection can run.",
+            extracted.textSource === "ocr"
+              ? "OCR ran on this scanned PDF but recovered too little text for citation detection. Try a clearer scan, or paste the citations."
+              : "This PDF has little or no extractable text, and OCR could not recover enough to continue. Try a text-based export, or paste the citations.",
           fileName: extracted.fileName,
           pageCount: extracted.pageCount,
           charCount: extracted.charCount,
           hasTextLayer: false,
+          textSource: extracted.textSource,
+          ocr: extracted.ocr,
         },
         { status: 422 },
       );
@@ -132,12 +137,16 @@ export async function POST(request: Request) {
       } satisfies VerifyResponse["methodology"],
       controlRun,
       extractionMethod:
-        "pdf-parse text layer → reporter/Westlaw + case-name pairing → quote harvest → coverage-aware verify",
+        extracted.textSource === "ocr"
+          ? "pdf-parse screenshot → tesseract OCR → reporter/Westlaw + case-name pairing → quote harvest → coverage-aware verify"
+          : "pdf-parse text layer → reporter/Westlaw + case-name pairing → quote harvest → coverage-aware verify",
       document: {
         fileName: extracted.fileName,
         pageCount: extracted.pageCount,
         charCount: extracted.charCount,
         hasTextLayer: extracted.hasTextLayer,
+        textSource: extracted.textSource,
+        ocr: extracted.ocr,
       },
       extraction: {
         totalMatches: cites.citations.length,
@@ -158,6 +167,8 @@ export async function POST(request: Request) {
         elapsedMs: Date.now() - startedAt,
         queued: cites.verifyQueue.length,
         verifiedInRequest: results.length,
+        textSource: extracted.textSource,
+        ocr: extracted.ocr,
       },
       resultCount: results.length,
       counts,

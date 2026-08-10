@@ -76,6 +76,7 @@ curl -s -X POST http://localhost:3000/api/verify-pdf \
 
 ```bash
 npm run test:unit          # parser + consensus + quotes + report + regression pack
+npm run test:ocr           # image-only PDF → tesseract OCR → citation extract
 npm run test:controls      # live Richardson(+) / Leman(−)
 npm run test:pdf           # sample pleading PDF → extract → verify controls
 npm run test:smoke         # POST fixture PDF to /api/verify-pdf (needs a running server)
@@ -85,6 +86,9 @@ npm run build
 Reports carry `methodVersion`, per-source `checkedAt`, structured coverage envelopes,
 live control-pair results, and can be downloaded as JSON or Word-compatible `.doc`.
 
+Scanned / image-only PDFs are OCR'd automatically (pdf-parse screenshots → tesseract.js),
+up to 12 pages per upload. Text-layer PDFs skip OCR.
+
 ## Deploy (Vercel)
 
 Import the GitHub repo in Vercel (Framework Preset: Next.js). `vercel.json` sets:
@@ -92,13 +96,15 @@ Import the GitHub repo in Vercel (Framework Preset: Next.js). `vercel.json` sets
 | Route | maxDuration | memory |
 |---|---|---|
 | `/api/verify` | 120s | 1024 MB |
-| `/api/verify-pdf` | 300s | 1024 MB |
+| `/api/verify-pdf` | 300s | 3008 MB |
 
 Notes for a clean deploy:
 
 - **Node 20+** (`engines` in `package.json`)
 - **Fluid compute** should stay enabled (Hobby max duration is 300s with Fluid)
 - **PDF uploads capped at 4 MB** — Vercel Functions reject bodies over 4.5 MB
+- **OCR** needs the higher memory on `/api/verify-pdf` and network egress to fetch
+  tesseract language data on cold start (cached under `/tmp` afterward)
 - No secrets required; CourtListener search + CAP `static.case.law` are unauthenticated
 - Region pinned to `iad1` in `vercel.json` (change if you prefer)
 
@@ -109,4 +115,4 @@ npx vercel --prod     # production
 
 ## Stack
 
-Next.js (App Router) + TypeScript + `pdf-parse`. Verification core in `src/lib/verify/`; citation pairing in `src/lib/citations/`; report artifact in `src/lib/report/`. UI brand: **Citeproof**.
+Next.js (App Router) + TypeScript + `pdf-parse` + `tesseract.js`. Verification core in `src/lib/verify/`; citation pairing in `src/lib/citations/`; report artifact in `src/lib/report/`. UI brand: **Citeproof**.

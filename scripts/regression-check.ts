@@ -166,8 +166,9 @@ async function main() {
   assert.match(reportWordFileName(report), /\.doc$/);
 
   const pdfPath = resolve(root, "fixtures/sample-pleading.pdf");
-  const pdf = await extractPdfText(readFileSync(pdfPath));
+  const pdf = await extractPdfText(readFileSync(pdfPath), "sample-pleading.pdf");
   assert.ok(pdf.hasTextLayer);
+  assert.equal(pdf.textSource, "text_layer");
   const pdfCites = extractCitationsFromPages(pdf.pages);
   assert.ok(pdfCites.verifyQueue.length >= 1, "sample pleading should yield authorities");
 

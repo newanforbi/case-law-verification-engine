@@ -24,6 +24,10 @@
 .DS_Store
 *.pem
 
+# OCR fixture intermediates (committed artifact is scanned-pleading.pdf)
+/fixtures/scanned-pleading.png
+/fixtures/scanned-pleading.rgb
+
 # debug
 npm-debug.log*
 yarn-debug.log*

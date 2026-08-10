@@ -44,6 +44,8 @@ interface PdfVerifyResponse extends VerifyResponse {
     pageCount: number;
     charCount: number;
     hasTextLayer: boolean;
+    textSource?: "text_layer" | "ocr";
+    ocr?: { pagesProcessed: number; pagesSkipped: number; elapsedMs: number };
   };
   extraction?: {
     totalMatches: number;
@@ -55,7 +57,13 @@ interface PdfVerifyResponse extends VerifyResponse {
   };
   verified?: boolean;
   error?: string;
-  diagnostics?: { elapsedMs: number; queued: number; verifiedInRequest: number };
+  diagnostics?: {
+    elapsedMs: number;
+    queued: number;
+    verifiedInRequest: number;
+    textSource?: "text_layer" | "ocr";
+    ocr?: { pagesProcessed: number; pagesSkipped: number; elapsedMs: number };
+  };
 }
 
 /**
@@ -528,7 +536,23 @@ export function Verifier() {
               <p className="mt-1 text-sm text-parchment-dim">
                 {data.document.pageCount} pages · {data.extraction.totalMatches} citation
                 matches · {data.extraction.verifyQueueCount} authorities queued for verify
+                {data.document.textSource === "ocr"
+                  ? ` · text via OCR${
+                      data.document.ocr
+                        ? ` (${data.document.ocr.pagesProcessed} page${
+                            data.document.ocr.pagesProcessed === 1 ? "" : "s"
+                          })`
+                        : ""
+                    }`
+                  : ""}
               </p>
+              {data.document.textSource === "ocr" ? (
+                <p className="mt-2 text-xs text-parchment-dim">
+                  This filing had no selectable text layer, so pages were OCR&apos;d before
+                  citation detection. OCR can misread characters — skim the queued authorities
+                  before relying on them.
+                </p>
+              ) : null}
               {data.extraction.occurrences.length > 0 && (
                 <details className="mt-3">
                   <summary className="cursor-pointer text-sm text-brass-soft">

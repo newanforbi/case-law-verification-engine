@@ -9,7 +9,7 @@
     },
     "src/app/api/verify-pdf/route.ts": {
       "maxDuration": 300,
-      "memory": 1024
+      "memory": 3008
     }
   }
 }

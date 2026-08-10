@@ -15,7 +15,7 @@ async function main() {
     "Complaint Ngwa Nforbi v Meza-Gonzalez and Melano NDCal 3 Operative.pdf";
 
   const t0 = Date.now();
-  const pdf = await extractPdfText(readFileSync(path));
+  const pdf = await extractPdfText(readFileSync(path), path.split("/").pop() || "filing.pdf");
   const cites = extractCitationsFromPages(pdf.pages);
   const extractMs = Date.now() - t0;
   assert.ok(extractMs < 15_000, `extract too slow: ${extractMs}ms`);

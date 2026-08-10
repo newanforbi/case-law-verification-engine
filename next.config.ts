@@ -19,7 +19,10 @@ const nextConfig: NextConfig = {
       "./node_modules/@napi-rs/canvas-linux-x64-musl/**/*",
       "./node_modules/pdf-parse/dist/**/*",
       "./node_modules/tesseract.js/**/*",
+      "./node_modules/tesseract.js/src/worker-script/**/*",
       "./node_modules/tesseract.js-core/**/*",
+      "./node_modules/tesseract.js-core/*.wasm",
+      "./node_modules/tesseract.js-core/*.wasm.js",
     ],
   },
 };

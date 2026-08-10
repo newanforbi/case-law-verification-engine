@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { extractCitationsFromPages } from "@/lib/citations/extract";
+import type { VerifyItem } from "@/lib/citations/extract";
+import { deleteFilingBlob, downloadFilingBlob } from "@/lib/pdf/blob";
 import { extractPdfText } from "@/lib/pdf/extract";
+import {
+  DIRECT_BODY_MAX_BYTES,
+  DIRECT_BODY_MAX_LABEL,
+  MAX_PDF_BYTES,
+  MAX_PDF_LABEL,
+  describeBytes,
+} from "@/lib/pdf/limits";
 import {
   CONTROL_EXPECTATIONS,
   CONTROLS,
@@ -11,12 +20,6 @@ import {
   type LookupResult,
   type VerifyResponse,
 } from "@/lib/verify";
-import type { VerifyItem } from "@/lib/citations/extract";
-import {
-  MAX_PDF_BYTES,
-  MAX_PDF_LABEL,
-  describeBytes,
-} from "@/lib/verify/client-constants";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,92 +27,135 @@ export const maxDuration = 300;
 
 const MAX_VERIFY = 40;
 
+type IncomingPdf = {
+  bytes: Uint8Array;
+  fileName: string;
+  blobUrl?: string;
+  verifyFlag: boolean;
+  limit: number;
+};
+
+function clampLimit(raw: unknown): number {
+  const n = Number(raw ?? MAX_VERIFY);
+  return Math.min(MAX_VERIFY, Math.max(1, Number.isFinite(n) ? Math.floor(n) : MAX_VERIFY));
+}
+
+async function readIncoming(request: Request): Promise<IncomingPdf> {
+  const contentType = request.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    const body = (await request.json()) as {
+      blobUrl?: string;
+      url?: string;
+      fileName?: string;
+      verify?: boolean | string;
+      limit?: number;
+    };
+    const blobUrl = String(body.blobUrl || body.url || "").trim();
+    if (!blobUrl) {
+      throw Object.assign(new Error("Missing blobUrl. Upload the PDF first."), {
+        status: 400,
+      });
+    }
+    const fileName =
+      String(body.fileName || "").trim() ||
+      decodeURIComponent(blobUrl.split("/").pop() || "upload.pdf");
+    const { bytes } = await downloadFilingBlob(blobUrl);
+    return {
+      bytes,
+      fileName,
+      blobUrl,
+      verifyFlag: String(body.verify ?? "true").toLowerCase() !== "false",
+      limit: clampLimit(body.limit),
+    };
+  }
+
+  const form = await request.formData();
+  const file = form.get("file");
+  if (!(file instanceof File)) {
+    throw Object.assign(
+      new Error(
+        "Missing PDF file. Upload a multipart field named file, or send JSON { blobUrl }.",
+      ),
+      { status: 400 },
+    );
+  }
+  const fileName = file.name || "upload.pdf";
+  if (!fileName.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
+    throw Object.assign(new Error("Only PDF uploads are supported."), { status: 400 });
+  }
+  // Direct multipart must stay under the platform body wall. Larger filings
+  // go through /api/pdf/upload → Blob → this route with blobUrl.
+  if (file.size > DIRECT_BODY_MAX_BYTES) {
+    throw Object.assign(
+      new Error(
+        `That PDF is ${describeBytes(file.size)}. Files over ${DIRECT_BODY_MAX_LABEL} must upload via Blob storage first.`,
+      ),
+      { status: 413 },
+    );
+  }
+  if (file.size > MAX_PDF_BYTES) {
+    throw Object.assign(
+      new Error(
+        `That PDF is ${describeBytes(file.size)}, over the ${MAX_PDF_LABEL} upload limit.`,
+      ),
+      { status: 413 },
+    );
+  }
+  return {
+    bytes: new Uint8Array(await file.arrayBuffer()),
+    fileName,
+    verifyFlag: String(form.get("verify") ?? "true").toLowerCase() !== "false",
+    limit: clampLimit(form.get("limit")),
+  };
+}
+
 export async function POST(request: Request) {
   const startedAt = Date.now();
+  let blobUrl: string | undefined;
   try {
-    const form = await request.formData();
-    const file = form.get("file");
-    const verifyFlag = String(form.get("verify") ?? "true").toLowerCase() !== "false";
-    const limitRaw = Number(form.get("limit") ?? MAX_VERIFY);
-    const limit = Math.min(
-      MAX_VERIFY,
-      Math.max(1, Number.isFinite(limitRaw) ? Math.floor(limitRaw) : MAX_VERIFY),
-    );
+    const incoming = await readIncoming(request);
+    blobUrl = incoming.blobUrl;
 
-    if (!(file instanceof File)) {
-      return NextResponse.json(
-        { error: "Missing PDF file. Upload a multipart field named file." },
-        { status: 400 },
-      );
-    }
-
-    const name = file.name || "upload.pdf";
-    if (!name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
-      return NextResponse.json(
-        { error: "Only PDF uploads are supported." },
-        { status: 400 },
-      );
-    }
-
-    // Vercel refuses an oversized body before this route runs, and its refusal
-    // is an HTML page. This one is for every other way the request can arrive
-    // — local, self-hosted, a platform that lets it through — so the answer is
-    // JSON the client can actually read.
-    if (file.size > MAX_PDF_BYTES) {
-      return NextResponse.json(
-        {
-          error: `That PDF is ${describeBytes(file.size)}, over the ${MAX_PDF_LABEL} upload limit.`,
-          fileName: file.name,
-          bytes: file.size,
-          limitBytes: MAX_PDF_BYTES,
-        },
-        { status: 413 },
-      );
-    }
-
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const extracted = await extractPdfText(bytes, name);
+    const extracted = await extractPdfText(incoming.bytes, incoming.fileName);
 
     if (!extracted.hasTextLayer) {
       return NextResponse.json(
         {
           error:
-            "This PDF has little or no extractable text. Scanned image-only PDFs need OCR before citation detection can run.",
+            extracted.textSource === "ocr"
+              ? "OCR ran on this scanned PDF but recovered too little text for citation detection. Try a clearer scan, or paste the citations."
+              : "This PDF has little or no extractable text, and OCR could not recover enough to continue. Try a text-based export, or paste the citations.",
           fileName: extracted.fileName,
           pageCount: extracted.pageCount,
           charCount: extracted.charCount,
           hasTextLayer: false,
+          textSource: extracted.textSource,
+          ocr: extracted.ocr,
         },
         { status: 422 },
       );
     }
 
     const cites = extractCitationsFromPages(extracted.pages, {
-      verifyLimit: limit,
+      verifyLimit: incoming.limit,
     });
 
     const verifyItems: VerifyItem[] = cites.verifyItems;
     const results: LookupResult[] = [];
-    // Stamp the method controls once alongside the filing — they travel with
-    // the exportable report so a later reader can see the method still held.
     const controlPromise =
-      verifyFlag && verifyItems.length ? runMethodControls() : null;
-    if (verifyFlag && verifyItems.length) {
+      incoming.verifyFlag && verifyItems.length ? runMethodControls() : null;
+    if (incoming.verifyFlag && verifyItems.length) {
       for (const item of verifyItems) {
         results.push(await lookupOneSafe(item.citation, item.passages));
       }
     }
     const controlRun = controlPromise ? await controlPromise : undefined;
-
     const counts = tallyConsensus(results);
-
-    // Compact occurrence list for the UI (authorities + reporters first).
     const interesting = cites.citations.filter((c) =>
       ["authority", "case_reporter", "case_westlaw", "case_name"].includes(c.kind),
     );
 
-    // methodVersion is present even on extract-only responses so deploy smoke
-    // and clients can pin the method without forcing a full verify.
     return NextResponse.json({
       generatedAt: new Date().toISOString(),
       methodVersion: METHOD_VERSION,
@@ -132,12 +178,16 @@ export async function POST(request: Request) {
       } satisfies VerifyResponse["methodology"],
       controlRun,
       extractionMethod:
-        "pdf-parse text layer → reporter/Westlaw + case-name pairing → quote harvest → coverage-aware verify",
+        extracted.textSource === "ocr"
+          ? "pdf-parse screenshot → tesseract OCR → reporter/Westlaw + case-name pairing → quote harvest → coverage-aware verify"
+          : "pdf-parse text layer → reporter/Westlaw + case-name pairing → quote harvest → coverage-aware verify",
       document: {
         fileName: extracted.fileName,
         pageCount: extracted.pageCount,
         charCount: extracted.charCount,
         hasTextLayer: extracted.hasTextLayer,
+        textSource: extracted.textSource,
+        ocr: extracted.ocr,
       },
       extraction: {
         totalMatches: cites.citations.length,
@@ -152,12 +202,14 @@ export async function POST(request: Request) {
           context: c.context,
         })),
       },
-      verified: verifyFlag,
-      // So the next failure report says what the request was actually doing.
+      verified: incoming.verifyFlag,
       diagnostics: {
         elapsedMs: Date.now() - startedAt,
         queued: cites.verifyQueue.length,
         verifiedInRequest: results.length,
+        textSource: extracted.textSource,
+        ocr: extracted.ocr,
+        viaBlob: Boolean(blobUrl),
       },
       resultCount: results.length,
       counts,
@@ -166,9 +218,20 @@ export async function POST(request: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "PDF verification failed";
     const status =
-      message.includes("limit") || message.includes("empty") || message.includes("Only PDF")
-        ? 400
-        : 500;
+      typeof err === "object" &&
+      err &&
+      "status" in err &&
+      typeof (err as { status: unknown }).status === "number"
+        ? (err as { status: number }).status
+        : message.includes("limit") ||
+            message.includes("empty") ||
+            message.includes("Only PDF") ||
+            message.includes("Missing") ||
+            message.includes("Invalid")
+          ? 400
+          : 500;
     return NextResponse.json({ error: message }, { status });
+  } finally {
+    if (blobUrl) await deleteFilingBlob(blobUrl);
   }
 }

@@ -10,7 +10,8 @@ import type {
   Support,
   VerifyResponse,
 } from "@/lib/verify";
-import { intakePdf } from "@/lib/pdf/client-upload";
+import { intakeFiling } from "@/lib/pdf/client-upload";
+import { filingFormatFromName } from "@/lib/filing/kinds";
 import { reportToWordHtml, reportWordFileName } from "@/lib/report/export-word";
 import { buildReport, reportFileName } from "@/lib/report/report";
 import {
@@ -42,10 +43,11 @@ interface VerifyItemPayload {
 interface PdfVerifyResponse extends VerifyResponse {
   document?: {
     fileName: string;
+    format?: "pdf" | "docx";
     pageCount: number;
     charCount: number;
     hasTextLayer: boolean;
-    textSource?: "text_layer" | "ocr";
+    textSource?: "text_layer" | "ocr" | "docx";
     ocr?: { pagesProcessed: number; pagesSkipped: number; elapsedMs: number };
   };
   extraction?: {
@@ -62,7 +64,7 @@ interface PdfVerifyResponse extends VerifyResponse {
     elapsedMs: number;
     queued: number;
     verifiedInRequest: number;
-    textSource?: "text_layer" | "ocr";
+    textSource?: "text_layer" | "ocr" | "docx";
     ocr?: { pagesProcessed: number; pagesSkipped: number; elapsedMs: number };
   };
 }
@@ -173,13 +175,13 @@ async function readJson<T>(res: Response, fallback: string): Promise<T> {
 
 function explainNonJson(status: number, fallback: string): string {
   if (status === 413)
-    return `That PDF was rejected as too large for a direct upload. Files up to ${MAX_PDF_LABEL} are accepted via Blob storage.`;
+    return `That file was rejected as too large for a direct upload. Files up to ${MAX_PDF_LABEL} are accepted via Blob storage.`;
   if (status === 504 || status === 408)
     return "The server took too long and gave up. Try a shorter document, or one with fewer authorities.";
   if (status === 502 || status === 503)
     return "The server was unavailable. Nothing was checked — try again in a moment.";
   if (status === 500)
-    return `${fallback}: the PDF engine crashed before it could answer. Retry once; if it persists, paste the citations instead.`;
+    return `${fallback}: the extract engine crashed before it could answer. Retry once; if it persists, paste the citations instead.`;
   return `${fallback} (HTTP ${status}). The server returned a page instead of a result.`;
 }
 
@@ -319,18 +321,18 @@ export function Verifier() {
   }
 
   async function runVerifyPdf(selected?: File | null) {
-    const pdf = selected ?? file;
-    if (!pdf) {
-      setError("Choose a PDF to upload.");
+    const filing = selected ?? file;
+    if (!filing) {
+      setError("Choose a PDF or Word (.docx) file to upload.");
       return;
     }
     setLoading(true);
     setError(null);
     setProgress(null);
     try {
-      // Small PDFs stay on multipart (works without Blob). Larger ones upload
+      // Small files stay on multipart (works without Blob). Larger ones upload
       // straight to Vercel Blob so they never hit the serverless body wall.
-      const intake = await intakePdf(pdf);
+      const intake = await intakeFiling(filing);
       let res: Response;
       if (intake.mode === "blob") {
         res = await fetch("/api/verify-pdf", {
@@ -348,8 +350,8 @@ export function Verifier() {
         body.append("verify", "false");
         res = await fetch("/api/verify-pdf", { method: "POST", body });
       }
-      const base = await readJson<PdfVerifyResponse>(res, "PDF verification failed");
-      if (!res.ok) throw new Error(base.error || "PDF verification failed");
+      const base = await readJson<PdfVerifyResponse>(res, "Filing verification failed");
+      if (!res.ok) throw new Error(base.error || "Filing verification failed");
 
       const items =
         base.extraction?.verifyItems ??
@@ -363,7 +365,7 @@ export function Verifier() {
       // harvested from the filing travel with each item so quote checks run.
       await verifyInBatches(items, base);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "PDF verification failed");
+      setError(err instanceof Error ? err.message : "Filing verification failed");
     } finally {
       setLoading(false);
       setProgress(null);
@@ -372,15 +374,15 @@ export function Verifier() {
 
   function acceptFile(next: File | null) {
     if (!next) return;
-    if (!next.name.toLowerCase().endsWith(".pdf") && next.type !== "application/pdf") {
-      setError("Only PDF files are accepted.");
+    if (!filingFormatFromName(next.name, next.type)) {
+      setError("Only PDF and Word (.docx) files are accepted.");
       return;
     }
     // Refuse it here rather than letting the platform reject the request with
     // an error page the client cannot read.
     if (next.size > MAX_PDF_BYTES) {
       setError(
-        `That PDF is ${describeBytes(next.size)}, over the ${MAX_PDF_LABEL} upload limit. Split it, or export a text-only copy.`,
+        `That file is ${describeBytes(next.size)}, over the ${MAX_PDF_LABEL} upload limit. Split it, or export a smaller copy.`,
       );
       setFile(null);
       return;
@@ -438,8 +440,8 @@ export function Verifier() {
               Drop a pleading or brief
             </p>
             <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-parchment-dim">
-              We extract the text layer (or OCR a scan), pair case names to reporter/Westlaw pins,
-              then verify each authority against CourtListener and CAP.
+              Word (.docx) or PDF — we extract the text (or OCR a scan), pair case names to
+              reporter/Westlaw pins, then verify each authority against CourtListener and CAP.
             </p>
             <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
               <button
@@ -447,12 +449,12 @@ export function Verifier() {
                 onClick={() => inputRef.current?.click()}
                 className="rounded-sm border border-brass/40 px-4 py-2 text-sm text-brass transition hover:bg-brass/10"
               >
-                Choose PDF
+                Choose file
               </button>
               <input
                 ref={inputRef}
                 type="file"
-                accept="application/pdf,.pdf"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 className="hidden"
                 onChange={(e) => acceptFile(e.target.files?.[0] ?? null)}
               />
@@ -465,7 +467,7 @@ export function Verifier() {
                 </p>
               ) : (
                 <p className="text-sm text-parchment-dim">
-                  PDF up to {MAX_PDF_LABEL} · scans OCR&apos;d automatically
+                  PDF or .docx up to {MAX_PDF_LABEL} · scans OCR&apos;d automatically
                 </p>
               )}
             </div>
@@ -477,7 +479,7 @@ export function Verifier() {
             <ActionButton
               loading={loading}
               onClick={() => void runVerifyPdf()}
-              label="Parse & verify PDF"
+              label="Parse & verify filing"
               disabled={!file}
             />
           </div>
@@ -551,8 +553,12 @@ export function Verifier() {
                 {data.document.fileName}
               </p>
               <p className="mt-1 text-sm text-parchment-dim">
-                {data.document.pageCount} pages · {data.extraction.totalMatches} citation
-                matches · {data.extraction.verifyQueueCount} authorities queued for verify
+                {data.document.format === "docx" ? "Word" : "PDF"}
+                {" · "}
+                {data.document.pageCount}{" "}
+                {data.document.pageCount === 1 ? "page" : "pages"} ·{" "}
+                {data.extraction.totalMatches} citation matches ·{" "}
+                {data.extraction.verifyQueueCount} authorities queued for verify
                 {data.document.textSource === "ocr"
                   ? ` · text via OCR${
                       data.document.ocr
@@ -561,7 +567,9 @@ export function Verifier() {
                           })`
                         : ""
                     }`
-                  : ""}
+                  : data.document.textSource === "docx"
+                    ? " · text from Word"
+                    : ""}
               </p>
               {data.document.textSource === "ocr" ? (
                 <p className="mt-2 text-xs text-parchment-dim">

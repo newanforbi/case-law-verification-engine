@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { extractCitationsFromPages } from "@/lib/citations/extract";
 import type { VerifyItem } from "@/lib/citations/extract";
+import { extractFilingText } from "@/lib/filing/extract";
+import { filingFormatFromName, isAcceptedFiling } from "@/lib/filing/kinds";
 import { deleteFilingBlob, downloadFilingBlob } from "@/lib/pdf/blob";
-import { extractPdfText } from "@/lib/pdf/extract";
 import {
   DIRECT_BODY_MAX_BYTES,
   DIRECT_BODY_MAX_LABEL,
@@ -53,13 +54,19 @@ async function readIncoming(request: Request): Promise<IncomingPdf> {
     };
     const blobUrl = String(body.blobUrl || body.url || "").trim();
     if (!blobUrl) {
-      throw Object.assign(new Error("Missing blobUrl. Upload the PDF first."), {
+      throw Object.assign(new Error("Missing blobUrl. Upload the filing first."), {
         status: 400,
       });
     }
     const fileName =
       String(body.fileName || "").trim() ||
       decodeURIComponent(blobUrl.split("/").pop() || "upload.pdf");
+    if (!isAcceptedFiling(fileName)) {
+      throw Object.assign(
+        new Error("Only PDF and Word (.docx) uploads are supported."),
+        { status: 400 },
+      );
+    }
     const { bytes } = await downloadFilingBlob(blobUrl);
     return {
       bytes,
@@ -75,21 +82,24 @@ async function readIncoming(request: Request): Promise<IncomingPdf> {
   if (!(file instanceof File)) {
     throw Object.assign(
       new Error(
-        "Missing PDF file. Upload a multipart field named file, or send JSON { blobUrl }.",
+        "Missing filing. Upload a multipart field named file, or send JSON { blobUrl }.",
       ),
       { status: 400 },
     );
   }
   const fileName = file.name || "upload.pdf";
-  if (!fileName.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
-    throw Object.assign(new Error("Only PDF uploads are supported."), { status: 400 });
+  if (!isAcceptedFiling(fileName, file.type)) {
+    throw Object.assign(
+      new Error("Only PDF and Word (.docx) uploads are supported."),
+      { status: 400 },
+    );
   }
   // Direct multipart must stay under the platform body wall. Larger filings
   // go through /api/pdf/upload → Blob → this route with blobUrl.
   if (file.size > DIRECT_BODY_MAX_BYTES) {
     throw Object.assign(
       new Error(
-        `That PDF is ${describeBytes(file.size)}. Files over ${DIRECT_BODY_MAX_LABEL} must upload via Blob storage first.`,
+        `That file is ${describeBytes(file.size)}. Files over ${DIRECT_BODY_MAX_LABEL} must upload via Blob storage first.`,
       ),
       { status: 413 },
     );
@@ -97,7 +107,7 @@ async function readIncoming(request: Request): Promise<IncomingPdf> {
   if (file.size > MAX_PDF_BYTES) {
     throw Object.assign(
       new Error(
-        `That PDF is ${describeBytes(file.size)}, over the ${MAX_PDF_LABEL} upload limit.`,
+        `That file is ${describeBytes(file.size)}, over the ${MAX_PDF_LABEL} upload limit.`,
       ),
       { status: 413 },
     );
@@ -117,20 +127,26 @@ export async function POST(request: Request) {
     const incoming = await readIncoming(request);
     blobUrl = incoming.blobUrl;
 
-    const extracted = await extractPdfText(incoming.bytes, incoming.fileName);
+    const extracted = await extractFilingText(incoming.bytes, incoming.fileName);
+    const format =
+      extracted.format || filingFormatFromName(incoming.fileName) || "pdf";
 
     if (!extracted.hasTextLayer) {
+      const emptyError =
+        format === "docx"
+          ? "This Word document has little or no extractable text for citation detection. Try a .docx export, or paste the citations."
+          : extracted.textSource === "ocr"
+            ? "OCR ran on this scanned PDF but recovered too little text for citation detection. Try a clearer scan, or paste the citations."
+            : "This PDF has little or no extractable text, and OCR could not recover enough to continue. Try a text-based export, or paste the citations.";
       return NextResponse.json(
         {
-          error:
-            extracted.textSource === "ocr"
-              ? "OCR ran on this scanned PDF but recovered too little text for citation detection. Try a clearer scan, or paste the citations."
-              : "This PDF has little or no extractable text, and OCR could not recover enough to continue. Try a text-based export, or paste the citations.",
+          error: emptyError,
           fileName: extracted.fileName,
           pageCount: extracted.pageCount,
           charCount: extracted.charCount,
           hasTextLayer: false,
           textSource: extracted.textSource,
+          format,
           ocr: extracted.ocr,
         },
         { status: 422 },
@@ -166,7 +182,7 @@ export async function POST(request: Request) {
           "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
         ],
         reference:
-          "PDF extract + citation pairing, then coverage-aware existence probe and quote checking via CourtListener + CAP static.case.law. We check what the opinion says, not whether it supports the argument.",
+          "Filing extract (PDF or Word .docx) + citation pairing, then coverage-aware existence probe and quote checking via CourtListener + CAP static.case.law. We check what the opinion says, not whether it supports the argument.",
         controls: {
           positive: CONTROLS.positive,
           negative: CONTROLS.negative,
@@ -180,9 +196,12 @@ export async function POST(request: Request) {
       extractionMethod:
         extracted.textSource === "ocr"
           ? "pdf-parse screenshot → tesseract OCR → reporter/Westlaw + case-name pairing → quote harvest → coverage-aware verify"
-          : "pdf-parse text layer → reporter/Westlaw + case-name pairing → quote harvest → coverage-aware verify",
+          : extracted.textSource === "docx"
+            ? "mammoth .docx text → reporter/Westlaw + case-name pairing → quote harvest → coverage-aware verify"
+            : "pdf-parse text layer → reporter/Westlaw + case-name pairing → quote harvest → coverage-aware verify",
       document: {
         fileName: extracted.fileName,
+        format,
         pageCount: extracted.pageCount,
         charCount: extracted.charCount,
         hasTextLayer: extracted.hasTextLayer,
@@ -216,7 +235,7 @@ export async function POST(request: Request) {
       results,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "PDF verification failed";
+    const message = err instanceof Error ? err.message : "Filing verification failed";
     const status =
       typeof err === "object" &&
       err &&
@@ -226,6 +245,8 @@ export async function POST(request: Request) {
         : message.includes("limit") ||
             message.includes("empty") ||
             message.includes("Only PDF") ||
+            message.includes("Only .docx") ||
+            message.includes("Word") ||
             message.includes("Missing") ||
             message.includes("Invalid")
           ? 400

@@ -196,19 +196,14 @@ body {
   box-shadow: 0 0 0 3px rgba(201, 166, 107, 0.12);
 }
 
-/* The report, on paper.
-   Everything that exists to gather input is noise once the run is over, so
-   print keeps only the record: the header block, the authorities, and their
-   evidence. Dark chrome is dropped for ink on white — a filed exhibit should
-   not arrive as a screenshot of a website. */
+/* Print = compact Citation Audit Report only.
+   Screen keeps the full source panels; paper is a tight cite/status list so
+   a filing attachment does not become a multi-page dump. */
 .print-only {
   display: none;
 }
 
 @media print {
-  /* Marked explicitly at each call site rather than inferred by selector:
-     #results sits inside the hero section, so anything that hides "the rest
-     of the page" structurally takes the report down with it. */
   .no-print,
   header,
   .grain,
@@ -218,25 +213,6 @@ body {
 
   .print-only {
     display: block;
-    margin-bottom: 1.5rem;
-    border-bottom: 1pt solid #000;
-    padding-bottom: 0.75rem;
-  }
-
-  .print-only h1 {
-    margin: 0 0 0.35rem;
-    font-size: 15pt;
-  }
-
-  .print-only p,
-  .print-only li {
-    margin: 0.15rem 0;
-    font-size: 8.5pt;
-  }
-
-  .print-only ul {
-    margin: 0.5rem 0 0;
-    padding-left: 1rem;
   }
 
   html,
@@ -246,8 +222,6 @@ body {
     color: #000 !important;
   }
 
-  /* The screen layout centres a full-height column, which on paper becomes a
-     third of a blank first page before the report begins. */
   main,
   main > div,
   main section {
@@ -259,31 +233,110 @@ body {
 
   #results {
     margin-top: 0 !important;
-  }
-
-  #results,
-  #results * {
     color: #000 !important;
     background: transparent !important;
-    border-color: #999 !important;
   }
 
-  /* An authority and its evidence belong on one page: a verdict stranded
-     from the coverage line that justifies it is worse than a short page. */
-  #results li {
-    break-inside: avoid;
-    page-break-inside: avoid;
-    margin-bottom: 0.6rem;
+  .audit-print {
+    font-family: Georgia, "Times New Roman", Times, serif;
+    font-size: 10pt;
+    line-height: 1.35;
+    color: #000;
   }
 
+  .audit-print-title {
+    margin: 0 0 2pt;
+    font-size: 15pt;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .audit-meta {
+    margin: 0 0 10pt;
+    font-size: 8pt;
+    color: #444 !important;
+    text-align: center;
+  }
+
+  .audit-lead {
+    margin: 0 0 12pt;
+    font-size: 10pt;
+  }
+
+  .audit-print-h {
+    margin: 12pt 0 3pt;
+    font-size: 10.5pt;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .audit-print-sub {
+    margin: 0 0 6pt;
+    font-size: 9pt;
+    color: #444 !important;
+  }
+
+  .audit-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .audit-table td {
+    padding: 2.5pt 6pt 2.5pt 0;
+    border-bottom: 0.4pt solid #ccc;
+    vertical-align: top;
+    font-size: 9.5pt;
+  }
+
+  .audit-cite {
+    width: 72%;
+  }
+
+  .audit-cite em {
+    font-style: italic;
+  }
+
+  .audit-status {
+    width: 28%;
+    padding-left: 8pt !important;
+    padding-right: 0 !important;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .audit-mark {
+    font-size: 9pt;
+  }
+
+  .audit-note {
+    color: #444 !important;
+    font-size: 8.5pt;
+  }
+
+  .audit-statutes {
+    margin: 12pt 0 0;
+    font-size: 10pt;
+  }
+
+  .audit-closing-title {
+    margin-top: 14pt;
+    padding-top: 10pt;
+    border-top: 0.5pt solid #999;
+  }
+
+  .audit-closing {
+    margin: 4pt 0 0;
+    font-size: 10pt;
+  }
+
+  /* Do not append raw URLs after every link — that alone doubles page count. */
   a[href]::after {
-    content: " <" attr(href) ">";
-    font-size: 7.5pt;
-    word-break: break-all;
+    content: none !important;
   }
 
   @page {
-    margin: 16mm;
+    margin: 14mm;
   }
 }
 

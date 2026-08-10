@@ -100,8 +100,13 @@ const STOP = new Set(
   ].map((w) => w),
 );
 
+/**
+ * Filing-side stretch cues. Keep these stronger than bare "all"/"absolute",
+ * which appear in ordinary holdings (e.g. Stump's "clear absence of all
+ * jurisdiction" / "absolute immunity").
+ */
 const OVERBREADTH =
-  /\b(?:always|never|any|every|all|absolute(?:ly)?|clear(?:ly)?\s+absence|no\s+circumstances|under\s+no\s+circumstances|categorically|without\s+exception|in\s+all\s+cases)\b/i;
+  /\b(?:always|never|categorically|without\s+exception|under\s+no\s+circumstances|in\s+(?:any|every|all)\s+cases?|no\s+circumstances|absolutely)\b/i;
 
 const LIMITING_IN_OPINION =
   /\b(?:unless|except|however|only\s+when|only\s+if|narrow(?:ly)?|limited|does\s+not\s+(?:mean|hold|extend)|we\s+do\s+not\s+(?:hold|decide)|in\s+this\s+context)\b/i;
@@ -201,13 +206,22 @@ function revisionFor(
   }
 }
 
+function filingOverbreadth(proposition: string, opinionText: string): boolean {
+  const m = proposition.match(OVERBREADTH);
+  if (!m) return false;
+  // If the opinion itself uses the same breadth cue, the filing is echoing
+  // doctrine — not inventing it.
+  const cue = normalize(m[0]);
+  return cue.length > 0 && !normalize(opinionText).includes(cue);
+}
+
 function scoreOne(
   proposition: Proposition,
   opinionText: string,
 ): HoldingPropositionFinding {
   const { ratio, hits, total } = overlapScore(proposition.text, opinionText);
   const excerpt = bestExcerpt(proposition.text, opinionText);
-  const overbroad = OVERBREADTH.test(proposition.text);
+  const overbroad = filingOverbreadth(proposition.text, opinionText);
   const opinionLimits = LIMITING_IN_OPINION.test(opinionText);
 
   let fit: HoldingFit;

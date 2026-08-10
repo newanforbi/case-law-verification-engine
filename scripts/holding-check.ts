@@ -50,6 +50,19 @@ assert.equal(supported.overall, "supported");
 assert.equal(supported.findings[0]?.fit, "supported");
 assert.equal(supported.findings[0]?.suggestedRevision, undefined);
 
+// Echoing "absolute immunity" from the opinion is not filing overbreadth.
+const echoesDoctrine = evaluateHoldingUse({
+  consensus: "FOUND",
+  opinionText: stumpOpinion,
+  propositions: [
+    {
+      text: "Judges of general jurisdiction enjoy absolute immunity for judicial acts even when alleged to be malicious or corrupt.",
+      role: "supports",
+    },
+  ],
+});
+assert.equal(echoesDoctrine.overall, "supported");
+
 const unsupported = evaluateHoldingUse({
   consensus: "FOUND",
   opinionText: stumpOpinion,

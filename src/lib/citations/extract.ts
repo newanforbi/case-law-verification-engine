@@ -1,8 +1,8 @@
 /**
  * Citation extractor: reporter/Westlaw patterns + case-name pairing.
  *
- * Focus: case-law authorities for verification. Statutes/rules are catalogued
- * but not sent to the CourtListener/CAP existence probe.
+ * Focus: case-law authorities for verification. Statutes are queued separately
+ * for LII / LegInfo probes and never enter the CourtListener/CAP case queue.
  */
 
 import { extractQuotedPassages } from "@/lib/verify/quotes";
@@ -43,12 +43,22 @@ export interface VerifyItem {
   propositions: Proposition[];
 }
 
+/** One statute queued for a free-code probe (LII / LegInfo), not CL/CAP. */
+export interface StatuteItem {
+  citation: string;
+  kind: "statute_federal" | "statute_state";
+  page?: number;
+}
+
 export interface CitationExtractionResult {
   citations: ExtractedCitation[];
   /** Deduped case-law strings suitable for the verify engine (authority preferred). */
   verifyQueue: string[];
   /** Same queue, with quoted passages harvested from surrounding context. */
   verifyItems: VerifyItem[];
+  /** Deduped statute cites for optional LII / LegInfo probes. */
+  statuteQueue: string[];
+  statuteItems: StatuteItem[];
   countsByKind: Record<string, number>;
 }
 
@@ -613,9 +623,29 @@ export function buildVerifyQueue(
   return { queue: sliced, items };
 }
 
+/** Build a statute probe queue — never merged into the case-law verify queue. */
+export function buildStatuteQueue(
+  citations: ExtractedCitation[],
+  limit = 25,
+): { queue: string[]; items: StatuteItem[] } {
+  const seen = new Set<string>();
+  const items: StatuteItem[] = [];
+
+  for (const c of citations) {
+    if (c.kind !== "statute_federal" && c.kind !== "statute_state") continue;
+    const key = normalizeKey(c.citation);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    items.push({ citation: c.citation, kind: c.kind, page: c.page });
+    if (items.length >= limit) break;
+  }
+
+  return { queue: items.map((i) => i.citation), items };
+}
+
 export function extractCitationsFromPages(
   pages: Array<{ page: number; text: string }>,
-  options: { verifyLimit?: number } = {},
+  options: { verifyLimit?: number; statuteLimit?: number } = {},
 ): CitationExtractionResult {
   const citations: ExtractedCitation[] = [];
   const pageTextByPage = new Map<number, string>();
@@ -635,11 +665,14 @@ export function extractCitationsFromPages(
     options.verifyLimit ?? 40,
     pageTextByPage,
   );
+  const statutes = buildStatuteQueue(citations, options.statuteLimit ?? 25);
 
   return {
     citations,
     verifyQueue: built.queue,
     verifyItems: built.items,
+    statuteQueue: statutes.queue,
+    statuteItems: statutes.items,
     countsByKind,
   };
 }

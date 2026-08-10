@@ -15,6 +15,7 @@
     "Armondo": "anticipates_contrary"
   },
   "mustNotQueue": ["1983"],
+  "mustStatuteQueue": ["1983", "40300.5"],
   "minAuthorities": 4,
   "minLocalRules": 1
 }

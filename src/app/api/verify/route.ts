@@ -4,8 +4,12 @@ import {
   CONTROLS,
   METHOD_VERSION,
   runMethodControls,
+  tallyConsensus,
   verifyCitationItems,
   verifyCitations,
+  verifyStatuteItems,
+  type StatuteKind,
+  type StatuteRequestItem,
   type VerifyRequestItem,
 } from "@/lib/verify";
 
@@ -19,10 +23,14 @@ export async function POST(request: Request) {
       citations?: string;
       text?: string;
       items?: VerifyRequestItem[];
+      /** Statute cites for LII / LegInfo probes (side channel). */
+      statutes?: StatuteRequestItem[];
       /** When true, also run the method control pair and attach controlRun. */
       includeControlRun?: boolean;
       /** When true, score filing propositions against opinion text. */
       holdingAudit?: boolean;
+      /** When true (default if statutes[] present), probe statutes. */
+      statuteProbe?: boolean;
       /** Controls-only request: return methodology + controlRun, no citations. */
       controlsOnly?: boolean;
     };
@@ -58,6 +66,20 @@ export async function POST(request: Request) {
 
     const includeControlRun = body.includeControlRun === true;
     const holdingAudit = body.holdingAudit === true;
+    const statuteItems = Array.isArray(body.statutes)
+      ? body.statutes
+          .map((item) => {
+            const citation = String(item?.citation ?? "").trim();
+            const kind: StatuteKind | undefined =
+              item?.kind === "statute_state" || item?.kind === "statute_federal"
+                ? item.kind
+                : undefined;
+            return { citation, kind };
+          })
+          .filter((item) => item.citation)
+      : [];
+    const wantStatutes =
+      statuteItems.length > 0 && body.statuteProbe !== false;
 
     if (Array.isArray(body.items) && body.items.length) {
       const items = body.items
@@ -89,17 +111,70 @@ export async function POST(request: Request) {
         includeControlRun,
         holdingAudit,
       });
+      if (wantStatutes) {
+        const statuteResults = await verifyStatuteItems(statuteItems);
+        return NextResponse.json({
+          ...result,
+          statuteResultCount: statuteResults.length,
+          statuteCounts: tallyConsensus(statuteResults),
+          statuteResults,
+        });
+      }
       return NextResponse.json(result);
+    }
+
+    // Statute-only batch (UI probes after case-law batches).
+    if (wantStatutes && !(body.citations ?? body.text ?? "").trim()) {
+      const statuteResults = await verifyStatuteItems(statuteItems);
+      return NextResponse.json({
+        generatedAt: new Date().toISOString(),
+        methodVersion: METHOD_VERSION,
+        methodology: {
+          version: METHOD_VERSION,
+          sources: [
+            "Legal Information Institute (law.cornell.edu) U.S. Code — statute probe only",
+            "California LegInfo codes_displaySection — statute probe only",
+          ],
+          reference:
+            "Statute-only probe against free LII / LegInfo pages. Does not touch case-law consensus.",
+          controls: {
+            positive: CONTROLS.positive,
+            negative: CONTROLS.negative,
+            expected: {
+              positive: CONTROL_EXPECTATIONS.positive,
+              negative: CONTROL_EXPECTATIONS.negative,
+            },
+          },
+        },
+        resultCount: 0,
+        counts: tallyConsensus([]),
+        results: [],
+        statuteResultCount: statuteResults.length,
+        statuteCounts: tallyConsensus(statuteResults),
+        statuteResults,
+      });
     }
 
     const raw = (body.citations ?? body.text ?? "").trim();
     if (!raw) {
       return NextResponse.json(
-        { error: "Missing citations. Paste one citation per line, or send items[]." },
+        {
+          error:
+            "Missing citations. Paste one citation per line, send items[], or statutes[].",
+        },
         { status: 400 },
       );
     }
     const result = await verifyCitations(raw, { includeControlRun, holdingAudit });
+    if (wantStatutes) {
+      const statuteResults = await verifyStatuteItems(statuteItems);
+      return NextResponse.json({
+        ...result,
+        statuteResultCount: statuteResults.length,
+        statuteCounts: tallyConsensus(statuteResults),
+        statuteResults,
+      });
+    }
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Verification failed";

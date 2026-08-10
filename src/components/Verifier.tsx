@@ -3,6 +3,7 @@
 import { startTransition, useRef, useState } from "react";
 import type {
   Consensus,
+  ContraryCluster,
   ControlRun,
   HoldingFit,
   LookupResult,
@@ -11,6 +12,7 @@ import type {
   StatuteKind,
   StatuteLookupResult,
   Support,
+  TreatmentStatus,
   VerifyResponse,
 } from "@/lib/verify";
 import { intakeFiling } from "@/lib/pdf/client-upload";
@@ -172,6 +174,35 @@ const HOLDING_TONE: Record<HoldingFit, string> = {
   unchecked: "status-UNCHECKED",
 };
 
+const TREATMENT_LABEL: Record<TreatmentStatus, string> = {
+  ok: "Subsequent cites",
+  unchecked: "Cites unchecked",
+  out_of_coverage: "No cite graph",
+  skipped: "Cites skipped",
+};
+
+/** Client-side recompute — avoids importing server treatment/http into the bundle. */
+function contraryClustersFromResults(results: LookupResult[]): ContraryCluster[] {
+  const out: ContraryCluster[] = [];
+  for (const r of results) {
+    const props = (r.propositions ?? []).filter(
+      (p) => p.role === "anticipates_contrary",
+    );
+    if (!props.length) continue;
+    out.push({
+      citation: r.query,
+      matchedName: r.matchedName || r.caseNameGuess,
+      propositions: props,
+      existence: r.consensus,
+      treatmentStatus: r.treatment?.status,
+      negativeLanguageSampleCount:
+        r.treatment?.negativeLanguageSamples?.length ?? 0,
+      citingCount: r.treatment?.citingCount,
+    });
+  }
+  return out;
+}
+
 /** A source reports what it was in a position to say, not merely hit or miss. */
 const OUTCOME_LABEL: Record<SourceOutcome, string> = {
   FOUND: "Hit",
@@ -225,6 +256,7 @@ export function Verifier() {
   const [dragOver, setDragOver] = useState(false);
   const [holdingAudit, setHoldingAudit] = useState(true);
   const [statuteProbe, setStatuteProbe] = useState(true);
+  const [treatmentProbe, setTreatmentProbe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PdfVerifyResponse | null>(null);
@@ -296,6 +328,7 @@ export function Verifier() {
           holdingAudit:
             holdingAudit &&
             slice.some((item) => (item.propositions?.length ?? 0) > 0),
+          treatmentProbe,
         }),
       });
       const batch = await readJson<VerifyResponse>(batchRes, "Verification failed");
@@ -318,6 +351,7 @@ export function Verifier() {
           results: snapshot,
           resultCount: snapshot.length,
           counts: tallyConsensus(snapshot),
+          contraryClusters: contraryClustersFromResults(snapshot),
           statuteResults: base.statuteResults ?? [],
           statuteResultCount: base.statuteResultCount ?? 0,
           statuteCounts: base.statuteCounts,
@@ -355,6 +389,7 @@ export function Verifier() {
           results: caseSnapshot,
           resultCount: caseSnapshot.length,
           counts: tallyConsensus(caseSnapshot),
+          contraryClusters: contraryClustersFromResults(caseSnapshot),
           statuteResults: statuteSnapshot,
           statuteResultCount: statuteSnapshot.length,
           statuteCounts: tallyConsensus(statuteSnapshot),
@@ -585,6 +620,18 @@ export function Verifier() {
                 (does not change case-law verdicts)
               </span>
             </label>
+            <label className="flex cursor-pointer items-start gap-2 text-xs text-parchment-dim md:text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-[var(--brass)]"
+                checked={treatmentProbe}
+                onChange={(e) => setTreatmentProbe(e.target.checked)}
+              />
+              <span>
+                Subsequent cites — CourtListener cites:(cluster) samples + filing contrary
+                clusters (not Shepard&apos;s/KeyCite; does not change verdicts)
+              </span>
+            </label>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-parchment-dim md:text-sm">
                 Extract → identify cites → verify (max 40 authorities)
@@ -764,6 +811,44 @@ export function Verifier() {
               ))}
             </ul>
           )}
+
+          {(data.contraryClusters?.length ?? 0) > 0 ? (
+            <div className="mt-10">
+              <h2 className="font-[family-name:var(--font-fraunces)] text-2xl text-parchment md:text-3xl">
+                Contrary clusters
+              </h2>
+              <p className="mt-1 text-sm text-parchment-dim">
+                Filing framed these authorities as limiting / contrary
+                (anticipates_contrary) — not citator treatment codes
+              </p>
+              <ul className="mt-4 space-y-3">
+                {data.contraryClusters!.map((c, i) => (
+                  <li
+                    key={`contrary-${c.citation}-${i}`}
+                    className="border border-[var(--line)] bg-ink-lift/70 px-4 py-3 md:px-5"
+                  >
+                    <p className="font-[family-name:var(--font-fraunces)] text-lg text-parchment">
+                      {c.citation}
+                    </p>
+                    <p className="mt-1 text-sm text-parchment-dim">
+                      {STATUS_LABEL[c.existence]}
+                      {c.citingCount != null ? ` · citeCount≈${c.citingCount}` : ""}
+                      {c.negativeLanguageSampleCount
+                        ? ` · ${c.negativeLanguageSampleCount} negative-language cue${c.negativeLanguageSampleCount === 1 ? "" : "s"} in cite sample`
+                        : ""}
+                    </p>
+                    <ul className="mt-2 space-y-1">
+                      {c.propositions.map((p, pi) => (
+                        <li key={pi} className="text-sm text-parchment-dim">
+                          {p.text}
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           {(data.statuteResults?.length ?? 0) > 0 ? (
             <div className="mt-10">
@@ -1125,6 +1210,22 @@ function ResultRow({ result }: { result: LookupResult }) {
               {HOLDING_LABEL[result.holding.overall]}
             </span>
           ) : null}
+          {result.treatment && result.treatment.status !== "skipped" ? (
+            <span
+              className={`${
+                result.treatment.status === "ok"
+                  ? "status-PARTIAL"
+                  : result.treatment.status === "unchecked"
+                    ? "status-UNCHECKED"
+                    : "status-UNKNOWN"
+              } rounded-sm border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em]`}
+            >
+              {TREATMENT_LABEL[result.treatment.status]}
+              {result.treatment.citingCount != null
+                ? ` · ${result.treatment.citingCount}`
+                : ""}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -1170,6 +1271,53 @@ function ResultRow({ result }: { result: LookupResult }) {
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {result.treatment && result.treatment.status !== "skipped" ? (
+        <div className="mt-3 border-l-2 border-[var(--line)] pl-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
+            Subsequent cites
+            <span className="font-normal normal-case tracking-normal text-parchment-dim">
+              {" "}
+              · CourtListener search
+              {result.treatment.clusterId != null
+                ? ` · cluster ${result.treatment.clusterId}`
+                : ""}
+            </span>
+          </p>
+          {result.treatment.note ? (
+            <p className="mt-1 text-xs leading-relaxed text-parchment-dim">
+              {result.treatment.note}
+            </p>
+          ) : null}
+          {result.treatment.samples.length > 0 ? (
+            <ul className="mt-2 space-y-1">
+              {result.treatment.samples.slice(0, 6).map((s, i) => (
+                <li key={`${s.url}-${i}`} className="text-sm text-parchment-dim">
+                  {s.negativeLanguage ? (
+                    <span className="mr-2 text-[11px] uppercase tracking-wide text-mismatch">
+                      neg cue
+                    </span>
+                  ) : null}
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brass-soft underline-offset-2 hover:underline"
+                  >
+                    {s.caseName}
+                  </a>
+                  {s.dateFiled || s.court ? (
+                    <span>
+                      {" "}
+                      ({[s.court, s.dateFiled].filter(Boolean).join(" · ")})
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
 

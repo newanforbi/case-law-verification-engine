@@ -20,6 +20,8 @@ Filing uploads also harvest **propositions** — the prose claims tied to each a
 
 Statutes are queued separately from case-law (`statuteQueue`). With **statute probes** enabled (default on filing verify), U.S.C. cites hit LII and mapped California code cites hit LegInfo. Those outcomes never change CourtListener/CAP consensus.
 
+With **subsequent-treatment** enabled (default on filing verify), Found authorities that return a CourtListener `cluster_id` get a `cites:(cluster)` sample plus `citeCount`. Filing propositions with role `anticipates_contrary` are grouped into **contrary clusters**. Keyword “negative language” flags on citing captions/syllabi are heuristics only — **not** Shepard’s or KeyCite treatment codes — and never change existence consensus.
+
 ## Existence verdicts
 
 | Status | Meaning |
@@ -52,6 +54,17 @@ Statutes are queued separately from case-law (`statuteQueue`). With **statute pr
 | `overstated` | Absolute language in the claim while the opinion uses limiting language |
 | `unsupported` | Little or no overlap with the retrieved opinion (or cite did not resolve) |
 | `unchecked` | Opinion text unavailable or proposition too thin to score |
+
+## Subsequent treatment (free sketch)
+
+| Status | Meaning |
+|---|---|
+| `ok` | CourtListener `cites:(cluster)` sample returned (see `samples` / `citeCount`) |
+| `unchecked` | Search unreachable or failed |
+| `out_of_coverage` | No cluster id available for a free cites: query |
+| `skipped` | Existence did not resolve as found — cites not probed |
+
+Contrary clusters list authorities the **filing** framed with `anticipates_contrary` (e.g. *but see*). They are not citator “disagree” labels.
 
 ## Method controls
 
@@ -94,6 +107,11 @@ curl -s -X POST http://localhost:3000/api/verify \
   -H 'content-type: application/json' \
   -d '{"statuteProbe":true,"statutes":[{"citation":"42 U.S.C. § 1983","kind":"statute_federal"},{"citation":"Vehicle Code § 40300.5","kind":"statute_state"}]}'
 
+# subsequent cites + contrary clusters
+curl -s -X POST http://localhost:3000/api/verify \
+  -H 'content-type: application/json' \
+  -d '{"treatmentProbe":true,"items":[{"citation":"Richardson v. McKnight, 521 U.S. 399 (1997)","propositions":[{"text":"But see Richardson for limits on private-guard immunity.","role":"anticipates_contrary"}]}]}'
+
 # PDF extract only (what the UI does first)
 npm run fixture:pdf
 curl -s -X POST http://localhost:3000/api/verify-pdf \
@@ -101,10 +119,11 @@ curl -s -X POST http://localhost:3000/api/verify-pdf \
 ```
 
 ```bash
-npm run test:unit          # parser + consensus + quotes + links + holding + statute + report + regression + docx
+npm run test:unit          # parser + consensus + quotes + links + holding + statute + treatment + report + regression + docx
 npm run test:links         # reference-link construction (offline)
 npm run test:holding       # holding-use heuristic fixtures (offline)
 npm run test:statute       # statute parse / LII-LegInfo classifiers (offline)
+npm run test:treatment     # subsequent-cite / contrary-cluster fixtures (offline)
 npm run test:ocr           # image-only PDF → tesseract OCR → citation extract
 npm run test:docx          # sample pleading .docx → extract → citation queue
 npm run test:controls      # live Richardson(+) / Leman(−)

@@ -31,6 +31,8 @@ export async function POST(request: Request) {
       holdingAudit?: boolean;
       /** When true (default if statutes[] present), probe statutes. */
       statuteProbe?: boolean;
+      /** When true, fetch CourtListener cites:(cluster) samples + contrary clusters. */
+      treatmentProbe?: boolean;
       /** Controls-only request: return methodology + controlRun, no citations. */
       controlsOnly?: boolean;
     };
@@ -66,6 +68,7 @@ export async function POST(request: Request) {
 
     const includeControlRun = body.includeControlRun === true;
     const holdingAudit = body.holdingAudit === true;
+    const treatmentProbe = body.treatmentProbe === true;
     const statuteItems = Array.isArray(body.statutes)
       ? body.statutes
           .map((item) => {
@@ -110,6 +113,7 @@ export async function POST(request: Request) {
       const result = await verifyCitationItems(items, {
         includeControlRun,
         holdingAudit,
+        treatmentProbe,
       });
       if (wantStatutes) {
         const statuteResults = await verifyStatuteItems(statuteItems);
@@ -165,7 +169,11 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const result = await verifyCitations(raw, { includeControlRun, holdingAudit });
+    const result = await verifyCitations(raw, {
+      includeControlRun,
+      holdingAudit,
+      treatmentProbe,
+    });
     if (wantStatutes) {
       const statuteResults = await verifyStatuteItems(statuteItems);
       return NextResponse.json({

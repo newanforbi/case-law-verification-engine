@@ -24,6 +24,27 @@ export function reportWordFileName(report: VerificationReport): string {
 
 /** HTML Word will open; save with a .doc extension. */
 export function reportToWordHtml(report: VerificationReport): string {
+  const treatmentNote = (r: (typeof report.records)[number]) => {
+    if (!r.treatment) return "—";
+    const bits = [
+      `Status: ${esc(r.treatment.status)}`,
+      r.treatment.citingCount != null
+        ? `citeCount≈${r.treatment.citingCount}`
+        : null,
+      `${r.treatment.samples.length} sample${r.treatment.samples.length === 1 ? "" : "s"}`,
+      `${r.treatment.negativeLanguageSamples.length} negative-language cue${r.treatment.negativeLanguageSamples.length === 1 ? "" : "s"}`,
+    ].filter(Boolean);
+    const sampleLines = r.treatment.samples
+      .slice(0, 5)
+      .map(
+        (s) =>
+          `${s.negativeLanguage ? "[neg] " : ""}${esc(s.caseName)}${
+            s.dateFiled ? ` (${esc(s.dateFiled)})` : ""
+          }`,
+      );
+    return [...bits, ...sampleLines].join("<br/>");
+  };
+
   const rows = report.records
     .map((r) => {
       const sources = r.sources
@@ -64,6 +85,7 @@ export function reportToWordHtml(report: VerificationReport): string {
   <td>${quotes}</td>
   <td>${props || "—"}</td>
   <td>${holding}</td>
+  <td>${treatmentNote(r)}</td>
   <td>${links || "—"}</td>
   <td>${esc(r.checkedAt || "—")}</td>
 </tr>`;
@@ -101,6 +123,25 @@ export function reportToWordHtml(report: VerificationReport): string {
 </tr>`;
     })
     .join("\n");
+
+  const contraryBlock =
+    (report.contraryClusters ?? []).length > 0
+      ? `
+  <h2>Contrary clusters (filing)</h2>
+  <p class="meta">Authorities the pleading framed as limiting / contrary — not citator treatment codes.</p>
+  <ul>
+${(report.contraryClusters ?? [])
+  .map(
+    (c) =>
+      `<li><strong>${esc(c.citation)}</strong> — ${esc(c.existence)}; ${
+        c.propositions.length
+      } contrary proposition${c.propositions.length === 1 ? "" : "s"}${
+        c.citingCount != null ? `; citeCount≈${c.citingCount}` : ""
+      }</li>`,
+  )
+  .join("\n")}
+  </ul>`
+      : "";
 
   const statuteBlock =
     (report.statuteRecords ?? []).length > 0
@@ -174,14 +215,17 @@ ${statuteRows}
         <th>Quotes</th>
         <th>Filing propositions</th>
         <th>Holding use</th>
+        <th>Subsequent cites (CL)</th>
         <th>Open links</th>
         <th>Checked at</th>
       </tr>
     </thead>
     <tbody>
-${rows || `<tr><td colspan="10">No authorities in this report.</td></tr>`}
+${rows || `<tr><td colspan="11">No authorities in this report.</td></tr>`}
     </tbody>
   </table>
+
+${contraryBlock}
 
 ${statuteBlock}
 

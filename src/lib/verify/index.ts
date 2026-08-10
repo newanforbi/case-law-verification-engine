@@ -11,6 +11,10 @@ import {
   parsePinCite,
 } from "./quotes";
 import { guessName, parseReporter, WL_RE } from "./reporters";
+import {
+  buildContraryClusters,
+  evaluateTreatment,
+} from "./treatment";
 import { METHOD_VERSION, tallyConsensus } from "./types";
 import type {
   Consensus,
@@ -26,6 +30,7 @@ import type {
 export { CONSENSUS_KINDS, HOLDING_FITS, METHOD_VERSION, SUPPORT_KINDS, tallyConsensus } from "./types";
 export type {
   Consensus,
+  ContraryCluster,
   ControlResult,
   ControlRun,
   CoverageEnvelope,
@@ -47,6 +52,9 @@ export type {
   StatuteSourceHit,
   Support,
   SupportReport,
+  TreatmentCite,
+  TreatmentReport,
+  TreatmentStatus,
   VerifyResponse,
 } from "./types";
 export {
@@ -67,6 +75,15 @@ export {
   verifyStatuteItems,
   type StatuteRequestItem,
 } from "./statutes";
+export {
+  buildContraryClusters,
+  buildTreatmentReport,
+  evaluateTreatment,
+  hasNegativeLanguage,
+  NEGATIVE_LANGUAGE_RE,
+  toTreatmentCite,
+  treatmentStatusLabel,
+} from "./treatment";
 
 export const CONTROLS = {
   positive: "Richardson v. McKnight, 521 U.S. 399 (1997)",
@@ -238,9 +255,10 @@ function methodologyBlock(): VerifyResponse["methodology"] {
       "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
       "Legal Information Institute (law.cornell.edu) U.S. Code — statute probe only",
       "California LegInfo codes_displaySection — statute probe only",
+      "CourtListener search cites:(cluster_id) — subsequent-cite sketch only",
     ],
     reference:
-      "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument. Optional holding-use audit scores harvested filing propositions against opinion text (heuristic overlap; HOLDING_AUDITOR=heuristic|llm) and never changes existence verdicts. Optional statute probes check free LII (U.S.C.) and California LegInfo pages; they never vote on case-law consensus. Open links marked primary come from voting sources (or retrieved opinion text); constructed Justia / LOC / Scholar links are references only.",
+      "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument. Optional holding-use audit scores harvested filing propositions against opinion text (heuristic overlap; HOLDING_AUDITOR=heuristic|llm) and never changes existence verdicts. Optional statute probes check free LII (U.S.C.) and California LegInfo pages; they never vote on case-law consensus. Optional subsequent-treatment sketches use CourtListener search cites:(cluster) samples and filing anticipates_contrary clusters — keyword negatives are heuristics, not Shepard's/KeyCite codes, and never change existence verdicts. Open links marked primary come from voting sources (or retrieved opinion text); constructed Justia / LOC / Scholar links are references only.",
     controls: {
       positive: CONTROLS.positive,
       negative: CONTROLS.negative,
@@ -284,6 +302,8 @@ export async function runMethodControls(): Promise<ControlRun> {
 export interface LookupOptions {
   /** When true, score harvested propositions against opinion text. */
   holdingAudit?: boolean;
+  /** When true, fetch a CourtListener cites:(cluster) sample. */
+  treatmentProbe?: boolean;
 }
 
 export async function lookupOneSafe(
@@ -345,6 +365,7 @@ export async function lookupOne(
   applyConsensus(result);
 
   const wantHolding = options.holdingAudit === true && propositions.length > 0;
+  const wantTreatment = options.treatmentProbe === true;
   const needOpinion =
     wantHolding ||
     passages.length > 0 ||
@@ -374,6 +395,16 @@ export async function lookupOne(
       consensus: result.consensus,
       textUrl: opinion?.url ?? result.support.textUrl,
       textSource: opinion?.source ?? result.support.textSource,
+    });
+  }
+
+  if (wantTreatment) {
+    const cl = result.sources.find((s) => s.source === "courtlistener");
+    result.treatment = await evaluateTreatment({
+      consensus: result.consensus,
+      clusterId: cl?.clusterId,
+      citeCount: cl?.citeCount,
+      clOutcome: cl?.outcome,
     });
   }
 
@@ -412,7 +443,11 @@ export function parseCitationInput(raw: string): string[] {
 
 export async function verifyCitationItems(
   items: VerifyRequestItem[],
-  options: { includeControlRun?: boolean; holdingAudit?: boolean } = {},
+  options: {
+    includeControlRun?: boolean;
+    holdingAudit?: boolean;
+    treatmentProbe?: boolean;
+  } = {},
 ): Promise<VerifyResponse> {
   if (!items.length) {
     throw new Error("Provide at least one citation to verify.");
@@ -425,6 +460,7 @@ export async function verifyCitationItems(
   // control pair on every slice. Ask once per session when stamping a report.
   const includeControlRun = options.includeControlRun === true;
   const holdingAudit = options.holdingAudit === true;
+  const treatmentProbe = options.treatmentProbe === true;
   const controlPromise = includeControlRun ? runMethodControls() : null;
 
   const results: LookupResult[] = [];
@@ -436,7 +472,7 @@ export async function verifyCitationItems(
         citation,
         item.passages ?? [],
         item.propositions ?? [],
-        { holdingAudit },
+        { holdingAudit, treatmentProbe },
       ),
     );
   }
@@ -456,12 +492,19 @@ export async function verifyCitationItems(
     resultCount: results.length,
     counts,
     results,
+    contraryClusters: treatmentProbe
+      ? buildContraryClusters(results)
+      : undefined,
   };
 }
 
 export async function verifyCitations(
   raw: string,
-  options: { includeControlRun?: boolean; holdingAudit?: boolean } = {},
+  options: {
+    includeControlRun?: boolean;
+    holdingAudit?: boolean;
+    treatmentProbe?: boolean;
+  } = {},
 ): Promise<VerifyResponse> {
   const cites = parseCitationInput(raw);
   return verifyCitationItems(

@@ -11,6 +11,7 @@
  */
 import type {
   Consensus,
+  ContraryCluster,
   ControlRun,
   CoverageEnvelope,
   HoldingReport,
@@ -21,8 +22,10 @@ import type {
   ReferenceLink,
   StatuteLookupResult,
   Support,
+  TreatmentReport,
   VerifyResponse,
 } from "@/lib/verify";
+import { buildContraryClusters } from "@/lib/verify/treatment";
 import { CONSENSUS_KINDS, METHOD_VERSION, SUPPORT_KINDS } from "@/lib/verify/types";
 
 export interface ReportSource {
@@ -54,6 +57,8 @@ export interface ReportRecord {
   propositions: Proposition[];
   /** Holding-use audit vs opinion text, when requested. */
   holding?: HoldingReport;
+  /** Subsequent-cite sketch (CourtListener cites: search), when requested. */
+  treatment?: TreatmentReport;
 }
 
 export interface StatuteReportRecord {
@@ -91,6 +96,7 @@ export interface VerificationReport {
   };
   records: ReportRecord[];
   statuteRecords: StatuteReportRecord[];
+  contraryClusters: ContraryCluster[];
   /** The limits, carried by the artifact rather than left to the reader. */
   caveats: string[];
 }
@@ -137,6 +143,7 @@ function toRecord(r: LookupResult): ReportRecord {
     links: r.links ?? [],
     propositions: r.propositions ?? [],
     holding: r.holding,
+    treatment: r.treatment,
   };
 }
 
@@ -153,6 +160,7 @@ function caveatsFor(records: ReportRecord[], controlRun?: ControlRun): string[] 
     "Primary open links come from CourtListener or CAP (or retrieved opinion text). Constructed Justia, Library of Congress, and Google Scholar links are references only — they do not affect existence verdicts.",
     "Holding-use scores (when present) are a separate heuristic over filing propositions vs opinion text. They never change existence consensus.",
     "Statute probes (when present) check free LII / California LegInfo pages only. They never vote on case-law consensus.",
+    "Subsequent-cite samples (when present) come from CourtListener search cites:(cluster). Keyword negatives are heuristics — not Shepard's or KeyCite treatment codes — and never change existence consensus.",
   ];
 
   const count = (fn: (r: ReportRecord) => boolean) => records.filter(fn).length;
@@ -261,6 +269,8 @@ export function buildReport(
 ): VerificationReport {
   const records = data.results.map(toRecord);
   const statuteRecords = (data.statuteResults ?? []).map(toStatuteRecord);
+  const contraryClusters =
+    data.contraryClusters ?? buildContraryClusters(data.results);
   const controlRun = extra.controlRun ?? data.controlRun;
   const methodology = defaultMethodology(data);
 
@@ -283,6 +293,7 @@ export function buildReport(
     methodVersion: data.methodVersion ?? methodology.version,
     records: records.map((r) => [r.citation, r.existence, r.support, r.checkedAt]),
     statutes: statuteRecords.map((r) => [r.citation, r.existence, r.checkedAt]),
+    contrary: contraryClusters.map((c) => c.citation),
     controlOk: controlRun?.ok ?? null,
   };
 
@@ -294,6 +305,19 @@ export function buildReport(
         `${absent} statute${absent === 1 ? "" : "s"} did not resolve on the free code host — confirm in an official reporter or annotated code before filing.`,
       );
     }
+  }
+  if (contraryClusters.length) {
+    caveats.push(
+      `${contraryClusters.length} authorit${contraryClusters.length === 1 ? "y was" : "ies were"} framed as contrary / limiting in the filing (anticipates_contrary). Review those uses alongside any subsequent-cite samples.`,
+    );
+  }
+  const negHits = records.filter(
+    (r) => (r.treatment?.negativeLanguageSamples?.length ?? 0) > 0,
+  ).length;
+  if (negHits) {
+    caveats.push(
+      `${negHits} authorit${negHits === 1 ? "y has" : "ies have"} citing opinions whose captions/syllabi matched noisy negative-language cues — heuristic only; open the opinions before treating anything as overruled.`,
+    );
   }
 
   return {
@@ -313,6 +337,7 @@ export function buildReport(
     },
     records,
     statuteRecords,
+    contraryClusters,
     caveats,
   };
 }

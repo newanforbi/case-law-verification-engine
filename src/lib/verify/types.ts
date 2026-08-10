@@ -7,9 +7,9 @@ export type { CoverageEnvelope, CoverageReason, Jurisdiction } from "./coverage"
 /**
  * Method identity stamped into every verify response and exportable report.
  * Bump when consensus rules, quote matching, coverage, holding fit, statute
- * probes, or report schema change.
+ * probes, subsequent treatment, or report schema change.
  */
-export const METHOD_VERSION = "2026.10.1";
+export const METHOD_VERSION = "2026.11.1";
 
 /**
  * Openable URL attached to a lookup. Primary = from a voting source or the
@@ -94,6 +94,10 @@ export interface SourceHit {
   citations?: string[];
   notes?: string;
   httpStatus?: number | null;
+  /** CourtListener cluster id, when the search hit returned one. */
+  clusterId?: number;
+  /** CourtListener citeCount from search, when present. */
+  citeCount?: number;
 }
 
 /**
@@ -160,6 +164,53 @@ export interface HoldingReport {
   note?: string;
 }
 
+/**
+ * Free-source subsequent-cite sketch (CourtListener search `cites:(cluster)`).
+ * Not Shepard's / KeyCite — never a treatment code, never a consensus vote.
+ */
+export type TreatmentStatus =
+  | "ok"
+  | "unchecked"
+  | "out_of_coverage"
+  | "skipped";
+
+export interface TreatmentCite {
+  caseName: string;
+  dateFiled?: string | null;
+  court?: string | null;
+  url: string;
+  clusterId?: number;
+  /** True when caseName/syllabus matched noisy negative-language cues. */
+  negativeLanguage?: boolean;
+}
+
+export interface TreatmentReport {
+  status: TreatmentStatus;
+  clusterId?: number;
+  /** CourtListener citeCount for the matched cluster, when known. */
+  citingCount?: number;
+  /** Sample of later opinions that cite this cluster (search `cites:`). */
+  samples: TreatmentCite[];
+  /** Subset of samples (or parallel hits) with negative-language cues. */
+  negativeLanguageSamples: TreatmentCite[];
+  note?: string;
+}
+
+/**
+ * Filing-grounded contrary cluster: authorities the pleading itself frames
+ * as limiting / contrary (`anticipates_contrary`), optionally enriched with
+ * treatment samples. Not a citator "disagree" label.
+ */
+export interface ContraryCluster {
+  citation: string;
+  matchedName: string;
+  propositions: Proposition[];
+  existence: Consensus;
+  treatmentStatus?: TreatmentStatus;
+  negativeLanguageSampleCount: number;
+  citingCount?: number;
+}
+
 export interface LookupResult {
   query: string;
   caseNameGuess: string;
@@ -176,6 +227,8 @@ export interface LookupResult {
   support: SupportReport;
   /** Holding-use audit, when requested and propositions were available. */
   holding?: HoldingReport;
+  /** Subsequent-cite sketch from CourtListener search, when requested. */
+  treatment?: TreatmentReport;
   /**
    * Openable URLs. Primary links are from voting sources / retrieved opinion
    * text; reference links are constructed and do not affect consensus.
@@ -273,4 +326,6 @@ export interface VerifyResponse {
   statuteResultCount?: number;
   statuteCounts?: Record<Consensus, number>;
   statuteResults?: StatuteLookupResult[];
+  /** Filing-grounded contrary clusters (anticipates_contrary), when probed. */
+  contraryClusters?: ContraryCluster[];
 }

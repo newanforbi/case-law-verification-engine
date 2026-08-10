@@ -113,14 +113,16 @@ assert.ok(report.caveats.some((c) => /outside both free sources/i.test(c)));
 const clean = buildReport(
   response([result("Richardson v. McKnight, 521 U.S. 399 (1997)", "FOUND", "SUPPORTED")]),
 );
-assert.equal(clean.caveats.length, 4);
+assert.equal(clean.caveats.length, 5);
 assert.ok(clean.caveats.some((c) => /what the opinion says/i.test(c)));
 assert.ok(clean.caveats.some((c) => /references only/i.test(c)));
 assert.ok(clean.caveats.some((c) => /Holding-use scores/i.test(c)));
 assert.ok(clean.caveats.some((c) => /Statute probes/i.test(c)));
+assert.ok(clean.caveats.some((c) => /Subsequent-cite samples/i.test(c)));
 assert.equal(clean.records[0]?.links?.length ?? 0, 0); // fixture has no links attached
 assert.equal(clean.summary.statutes, 0);
 assert.equal(clean.statuteRecords.length, 0);
+assert.equal(clean.contraryClusters.length, 0);
 
 const withHolding = buildReport(
   response([

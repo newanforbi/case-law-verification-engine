@@ -10,6 +10,8 @@ type ClResult = {
   citation?: Array<string | number>;
   caseName?: string;
   absolute_url?: string;
+  cluster_id?: number;
+  citeCount?: number;
 };
 
 function sleep(ms: number) {
@@ -103,6 +105,14 @@ export async function lookupCourtListener(
       else if (!rep && !wl && nameMatch) accept = true;
 
       if (accept) {
+        const clusterId =
+          typeof r.cluster_id === "number" && Number.isFinite(r.cluster_id)
+            ? r.cluster_id
+            : undefined;
+        const citeCount =
+          typeof r.citeCount === "number" && Number.isFinite(r.citeCount)
+            ? r.citeCount
+            : undefined;
         const hit = stamp({
           source: "courtlistener",
           outcome: "FOUND",
@@ -110,12 +120,14 @@ export async function lookupCourtListener(
           url: fullUrl,
           caseName: name,
           citations: cites,
+          clusterId,
+          citeCount,
           coverage: "CourtListener returned an opinion matching this pin.",
           envelope: envelopeForReporter(rep, {
             inCorpus: true,
             reason: "carried",
           }),
-          notes: `Search q=${JSON.stringify(q)}; cite_match=${citeMatch}; wl_match=${wlMatch}; name_match=${nameMatch}`,
+          notes: `Search q=${JSON.stringify(q)}; cite_match=${citeMatch}; wl_match=${wlMatch}; name_match=${nameMatch}; cluster_id=${clusterId ?? "none"}`,
           httpStatus: 200,
         });
         if ((citeMatch || wlMatch) && nameMatch) return hit;

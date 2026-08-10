@@ -9,7 +9,7 @@ export type { CoverageEnvelope, CoverageReason, Jurisdiction } from "./coverage"
  * Bump when consensus rules, quote matching, coverage, holding fit, statute
  * probes, subsequent treatment, or report schema change.
  */
-export const METHOD_VERSION = "2026.11.1";
+export const METHOD_VERSION = "2026.11.2";
 
 /**
  * Openable URL attached to a lookup. Primary = from a voting source or the

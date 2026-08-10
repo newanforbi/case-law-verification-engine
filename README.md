@@ -80,7 +80,15 @@ Contrary clusters list authorities the **filing** framed with `anticipates_contr
 | Justia | Cloudflare blocked |
 | Google Scholar | Unreliable / challenged |
 | `api.case.law` JSON | Auth / migration |
-| CourtListener citation-lookup | API token required |
+
+## CourtListener token (optional)
+
+Set `COURTLISTENER_API_TOKEN` (server env / Vercel secret) to enable authenticated
+`POST /api/rest/v4/citation-lookup/` for existence probes. Use the profile token with
+header form `Authorization: Token <key>` (not Bearer). When unset or on auth failure,
+Citeproof falls back to unauthenticated `/search/` — same behavior as before.
+
+Never commit the token. Rotate it if it was ever pasted into chat or logs.
 
 ## Develop
 
@@ -119,11 +127,12 @@ curl -s -X POST http://localhost:3000/api/verify-pdf \
 ```
 
 ```bash
-npm run test:unit          # parser + consensus + quotes + links + holding + statute + treatment + report + regression + docx
+npm run test:unit          # parser + consensus + quotes + links + holding + statute + treatment + citation-lookup + report + regression + docx
 npm run test:links         # reference-link construction (offline)
 npm run test:holding       # holding-use heuristic fixtures (offline)
 npm run test:statute       # statute parse / LII-LegInfo classifiers (offline)
 npm run test:treatment     # subsequent-cite / contrary-cluster fixtures (offline)
+npm run test:citation-lookup  # CourtListener citation-lookup response mapper (offline)
 npm run test:ocr           # image-only PDF → tesseract OCR → citation extract
 npm run test:docx          # sample pleading .docx → extract → citation queue
 npm run test:controls      # live Richardson(+) / Leman(−)
@@ -164,7 +173,8 @@ Notes for a clean deploy:
   Blob (create a Blob store in the project; token is injected as `BLOB_READ_WRITE_TOKEN`)
 - **OCR** needs network egress to fetch tesseract language data on cold start
   (cached under `/tmp` afterward)
-- No secrets required; CourtListener search + CAP `static.case.law` are unauthenticated
+- CAP `static.case.law` needs no secret. CourtListener search works anonymously;
+  set optional `COURTLISTENER_API_TOKEN` for citation-lookup
 - Region pinned to `iad1` in `vercel.json` (change if you prefer)
 
 ```bash

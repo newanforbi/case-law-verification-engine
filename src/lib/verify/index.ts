@@ -84,6 +84,10 @@ export {
   toTreatmentCite,
   treatmentStatusLabel,
 } from "./treatment";
+export {
+  courtListenerApiToken,
+  mapCitationLookupEntry,
+} from "./courtlistener";
 
 export const CONTROLS = {
   positive: "Richardson v. McKnight, 521 U.S. 399 (1997)",
@@ -251,14 +255,15 @@ function methodologyBlock(): VerifyResponse["methodology"] {
   return {
     version: METHOD_VERSION,
     sources: [
-      "CourtListener /api/rest/v4/search/",
+      "CourtListener /api/rest/v4/citation-lookup/ (when COURTLISTENER_API_TOKEN is set)",
+      "CourtListener /api/rest/v4/search/ (fallback / anonymous)",
       "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
       "Legal Information Institute (law.cornell.edu) U.S. Code — statute probe only",
       "California LegInfo codes_displaySection — statute probe only",
       "CourtListener search cites:(cluster_id) — subsequent-cite sketch only",
     ],
     reference:
-      "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument. Optional holding-use audit scores harvested filing propositions against opinion text (heuristic overlap; HOLDING_AUDITOR=heuristic|llm) and never changes existence verdicts. Optional statute probes check free LII (U.S.C.) and California LegInfo pages; they never vote on case-law consensus. Optional subsequent-treatment sketches use CourtListener search cites:(cluster) samples and filing anticipates_contrary clusters — keyword negatives are heuristics, not Shepard's/KeyCite codes, and never change existence verdicts. Open links marked primary come from voting sources (or retrieved opinion text); constructed Justia / LOC / Scholar links are references only.",
+      "Coverage-aware existence probe plus quote checking: CourtListener citation-lookup (optional token) or search, plus CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument. Optional holding-use audit scores harvested filing propositions against opinion text (heuristic overlap; HOLDING_AUDITOR=heuristic|llm) and never changes existence verdicts. Optional statute probes check free LII (U.S.C.) and California LegInfo pages; they never vote on case-law consensus. Optional subsequent-treatment sketches use CourtListener search cites:(cluster) samples and filing anticipates_contrary clusters — keyword negatives are heuristics, not Shepard's/KeyCite codes, and never change existence verdicts. Open links marked primary come from voting sources (or retrieved opinion text); constructed Justia / LOC / Scholar links are references only.",
     controls: {
       positive: CONTROLS.positive,
       negative: CONTROLS.negative,

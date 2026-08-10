@@ -4,6 +4,7 @@ import { startTransition, useRef, useState } from "react";
 import type {
   Consensus,
   ControlRun,
+  HoldingFit,
   LookupResult,
   QuoteMatch,
   SourceOutcome,
@@ -144,6 +145,22 @@ const QUOTE_TONE: Record<QuoteMatch, string> = {
   INDETERMINATE: "text-unknown",
 };
 
+const HOLDING_LABEL: Record<HoldingFit, string> = {
+  supported: "Holding fits",
+  aggressive: "Aggressive use",
+  overstated: "Overstated",
+  unsupported: "Unsupported by opinion",
+  unchecked: "Holding not checked",
+};
+
+const HOLDING_TONE: Record<HoldingFit, string> = {
+  supported: "status-FOUND",
+  aggressive: "status-CAPTION_MISMATCH",
+  overstated: "status-NOT_FOUND",
+  unsupported: "status-NOT_FOUND",
+  unchecked: "status-UNCHECKED",
+};
+
 /** A source reports what it was in a position to say, not merely hit or miss. */
 const OUTCOME_LABEL: Record<SourceOutcome, string> = {
   FOUND: "Hit",
@@ -195,6 +212,7 @@ export function Verifier() {
   const [text, setText] = useState(`${CONTROLS.positive}\n${CONTROLS.negative}`);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [holdingAudit, setHoldingAudit] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PdfVerifyResponse | null>(null);
@@ -256,7 +274,12 @@ export function Verifier() {
       const batchRes = await fetch("/api/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: slice }),
+        body: JSON.stringify({
+          items: slice,
+          holdingAudit:
+            holdingAudit &&
+            slice.some((item) => (item.propositions?.length ?? 0) > 0),
+        }),
       });
       const batch = await readJson<VerifyResponse>(batchRes, "Verification failed");
       if (!batchRes.ok) {
@@ -477,16 +500,30 @@ export function Verifier() {
               )}
             </div>
           </div>
-          <div className="flex flex-col gap-3 border-t border-[var(--line)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-5">
-            <p className="text-xs text-parchment-dim md:text-sm">
-              Extract → identify cites → verify (max 40 authorities)
-            </p>
-            <ActionButton
-              loading={loading}
-              onClick={() => void runVerifyPdf()}
-              label="Parse & verify filing"
-              disabled={!file}
-            />
+          <div className="flex flex-col gap-3 border-t border-[var(--line)] px-4 py-3 md:px-5">
+            <label className="flex cursor-pointer items-start gap-2 text-xs text-parchment-dim md:text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-[var(--brass)]"
+                checked={holdingAudit}
+                onChange={(e) => setHoldingAudit(e.target.checked)}
+              />
+              <span>
+                Holding-use audit — score harvested filing claims against opinion text
+                (does not change existence verdicts)
+              </span>
+            </label>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-parchment-dim md:text-sm">
+                Extract → identify cites → verify (max 40 authorities)
+              </p>
+              <ActionButton
+                loading={loading}
+                onClick={() => void runVerifyPdf()}
+                label="Parse & verify filing"
+                disabled={!file}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -871,6 +908,13 @@ function ResultRow({ result }: { result: LookupResult }) {
               {SUPPORT_LABEL[result.support.verdict]}
             </span>
           ) : null}
+          {result.holding ? (
+            <span
+              className={`${HOLDING_TONE[result.holding.overall]} rounded-sm border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em]`}
+            >
+              {HOLDING_LABEL[result.holding.overall]}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -913,6 +957,58 @@ function ResultRow({ result }: { result: LookupResult }) {
                   <span className="mr-2 text-parchment-dim">p.{p.page}</span>
                 ) : null}
                 <span className="text-parchment-dim">{p.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {result.holding ? (
+        <div className="mt-3 border-l-2 border-[var(--line)] pl-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
+            Holding use
+            <span className="font-normal normal-case tracking-normal text-parchment-dim">
+              {" "}
+              · {result.holding.auditor}
+            </span>
+          </p>
+          {result.holding.note ? (
+            <p className="mt-1 text-xs leading-relaxed text-parchment-dim">
+              {result.holding.note}
+            </p>
+          ) : null}
+          <ul className="mt-2 space-y-3">
+            {result.holding.findings.map((f, i) => (
+              <li key={`${f.fit}-${i}`}>
+                <p className="text-sm text-parchment">
+                  <span
+                    className={`mr-2 text-xs font-medium ${
+                      f.fit === "supported"
+                        ? "text-verified"
+                        : f.fit === "aggressive"
+                          ? "text-mismatch"
+                          : f.fit === "unchecked"
+                            ? "text-unknown"
+                            : "text-not-found"
+                    }`}
+                  >
+                    {HOLDING_LABEL[f.fit]}
+                  </span>
+                  <span className="text-parchment-dim">{f.proposition.text}</span>
+                </p>
+                {f.note ? (
+                  <p className="mt-1 text-xs leading-relaxed text-parchment-dim">{f.note}</p>
+                ) : null}
+                {f.excerpt ? (
+                  <p className="mt-1 text-xs leading-relaxed text-parchment-dim">
+                    Opinion: <span className="text-parchment/90">“{f.excerpt}”</span>
+                  </p>
+                ) : null}
+                {f.suggestedRevision ? (
+                  <p className="mt-1 text-xs leading-relaxed text-brass-soft">
+                    Suggested revision: {f.suggestedRevision}
+                  </p>
+                ) : null}
               </li>
             ))}
           </ul>

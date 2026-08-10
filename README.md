@@ -11,7 +11,7 @@ We check what the opinion says, not whether it supports your argument.
 
 Each result includes **open links**: primary URLs from CourtListener/CAP (or retrieved opinion text), plus constructed Justia / Library of Congress / Google Scholar references. Constructed links never affect the verdict.
 
-Filing uploads also harvest **propositions** — the prose claims tied to each authority (with a role cue: supports / distinguishes / anticipates contrary). These travel with verify batches for holding-use audit; they do not change existence verdicts.
+Filing uploads also harvest **propositions** — the prose claims tied to each authority (with a role cue: supports / distinguishes / anticipates contrary). With **holding-use audit** enabled (default on filing verify), those claims are scored against retrieved opinion text (`supported` / `aggressive` / `overstated` / `unsupported` / `unchecked`). The heuristic uses content-word overlap and overbreadth cues; set `HOLDING_AUDITOR=llm` later behind the same interface. Holding scores never change existence consensus.
 
 ## Existence verdicts
 
@@ -35,6 +35,16 @@ Filing uploads also harvest **propositions** — the prose claims tied to each a
 | `INDETERMINATE` | Quote too short to judge |
 | `NO_QUOTE` | No quoted language supplied |
 | `UNCHECKED` | Opinion text could not be retrieved |
+
+## Holding-use fits
+
+| Fit | Meaning |
+|---|---|
+| `supported` | Filing proposition overlaps the opinion without overbreadth cues |
+| `aggressive` | Partial overlap, or the claim stretches beyond clear textual support |
+| `overstated` | Absolute language in the claim while the opinion uses limiting language |
+| `unsupported` | Little or no overlap with the retrieved opinion (or cite did not resolve) |
+| `unchecked` | Opinion text unavailable or proposition too thin to score |
 
 ## Method controls
 
@@ -67,10 +77,10 @@ curl -s -X POST http://localhost:3000/api/verify \
   -H 'content-type: application/json' \
   -d '{"citations":"Richardson v. McKnight, 521 U.S. 399 (1997)\nIn re Leman, 66 Cal.App.5th 200"}'
 
-# items with harvested quotes
+# items with harvested quotes + holding audit
 curl -s -X POST http://localhost:3000/api/verify \
   -H 'content-type: application/json' \
-  -d '{"items":[{"citation":"Richardson v. McKnight, 521 U.S. 399, 402 (1997)","passages":["private prison guards"]}]}'
+  -d '{"holdingAudit":true,"items":[{"citation":"Richardson v. McKnight, 521 U.S. 399, 402 (1997)","passages":["private prison guards"],"propositions":[{"text":"Private prison guards do not enjoy the same immunity as public officers.","role":"supports"}]}]}'
 
 # PDF extract only (what the UI does first)
 npm run fixture:pdf
@@ -79,8 +89,9 @@ curl -s -X POST http://localhost:3000/api/verify-pdf \
 ```
 
 ```bash
-npm run test:unit          # parser + consensus + quotes + links + report + regression + docx
+npm run test:unit          # parser + consensus + quotes + links + holding + report + regression + docx
 npm run test:links         # reference-link construction (offline)
+npm run test:holding       # holding-use heuristic fixtures (offline)
 npm run test:ocr           # image-only PDF → tesseract OCR → citation extract
 npm run test:docx          # sample pleading .docx → extract → citation queue
 npm run test:controls      # live Richardson(+) / Leman(−)

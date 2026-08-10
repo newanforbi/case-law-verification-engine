@@ -6,9 +6,10 @@ export type { CoverageEnvelope, CoverageReason, Jurisdiction } from "./coverage"
 
 /**
  * Method identity stamped into every verify response and exportable report.
- * Bump when consensus rules, quote matching, coverage, or report schema change.
+ * Bump when consensus rules, quote matching, coverage, holding fit, or report
+ * schema change.
  */
-export const METHOD_VERSION = "2026.08.3";
+export const METHOD_VERSION = "2026.09.1";
 
 /**
  * Openable URL attached to a lookup. Primary = from a voting source or the
@@ -127,6 +128,38 @@ export interface SupportReport {
   textUrl?: string;
 }
 
+/**
+ * How fairly the filing's proposition sits against the opinion's holding.
+ * Separate from existence and from verbatim quote support.
+ */
+export const HOLDING_FITS = [
+  "supported",
+  "aggressive",
+  "overstated",
+  "unsupported",
+  "unchecked",
+] as const;
+
+export type HoldingFit = (typeof HOLDING_FITS)[number];
+
+export interface HoldingPropositionFinding {
+  proposition: Proposition;
+  fit: HoldingFit;
+  /** Short opinion excerpt that drove the score, when available. */
+  excerpt?: string;
+  suggestedRevision?: string;
+  note?: string;
+}
+
+export interface HoldingReport {
+  overall: HoldingFit;
+  findings: HoldingPropositionFinding[];
+  auditor: "heuristic" | "llm";
+  textSource?: SourceHit["source"];
+  textUrl?: string;
+  note?: string;
+}
+
 export interface LookupResult {
   query: string;
   caseNameGuess: string;
@@ -141,6 +174,8 @@ export interface LookupResult {
   matchedName: string;
   matchedCitations: string[];
   support: SupportReport;
+  /** Holding-use audit, when requested and propositions were available. */
+  holding?: HoldingReport;
   /**
    * Openable URLs. Primary links are from voting sources / retrieved opinion
    * text; reference links are constructed and do not affect consensus.
@@ -156,7 +191,6 @@ export interface LookupResult {
   /** Set only when the lookup itself failed, rather than the citation. */
   error?: string;
 }
-
 export interface ControlSpec {
   citation: string;
   expected: Consensus;

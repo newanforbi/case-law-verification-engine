@@ -2,6 +2,7 @@
 
 export {
   CONSENSUS_KINDS,
+  HOLDING_FITS,
   METHOD_VERSION,
   SUPPORT_KINDS,
   tallyConsensus,

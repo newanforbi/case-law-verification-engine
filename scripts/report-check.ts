@@ -113,10 +113,45 @@ assert.ok(report.caveats.some((c) => /outside both free sources/i.test(c)));
 const clean = buildReport(
   response([result("Richardson v. McKnight, 521 U.S. 399 (1997)", "FOUND", "SUPPORTED")]),
 );
-assert.equal(clean.caveats.length, 2);
+assert.equal(clean.caveats.length, 3);
 assert.ok(clean.caveats.some((c) => /what the opinion says/i.test(c)));
 assert.ok(clean.caveats.some((c) => /references only/i.test(c)));
+assert.ok(clean.caveats.some((c) => /Holding-use scores/i.test(c)));
 assert.equal(clean.records[0]?.links?.length ?? 0, 0); // fixture has no links attached
+
+const withHolding = buildReport(
+  response([
+    {
+      ...result("Stump v. Sparkman, 435 U.S. 349 (1978)", "FOUND", "NO_QUOTE"),
+      propositions: [
+        {
+          text: "Judges always have absolute immunity from suit in all cases.",
+          role: "supports",
+        },
+      ],
+      holding: {
+        overall: "overstated",
+        auditor: "heuristic",
+        findings: [
+          {
+            proposition: {
+              text: "Judges always have absolute immunity from suit in all cases.",
+              role: "supports",
+            },
+            fit: "overstated",
+            suggestedRevision: "Tone down absolute language.",
+            note: "overbreadth cue",
+          },
+        ],
+        note: "Heuristic holding audit.",
+      },
+    },
+  ]),
+);
+assert.equal(withHolding.records[0]?.holding?.overall, "overstated");
+assert.ok(withHolding.caveats.some((c) => /overstated or unsupported/i.test(c)));
+assert.match(reportToWordHtml(withHolding), /Holding use/i);
+assert.match(reportToWordHtml(withHolding), /Overall: overstated/);
 
 // Failed controls add a caveat.
 const failedControls = buildReport({

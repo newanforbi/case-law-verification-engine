@@ -13,6 +13,7 @@ import type {
   Consensus,
   ControlRun,
   CoverageEnvelope,
+  HoldingReport,
   LookupResult,
   PinFinding,
   QuoteFinding,
@@ -50,6 +51,8 @@ export interface ReportRecord {
   links: ReferenceLink[];
   /** Filing propositions harvested near the cite. */
   propositions: Proposition[];
+  /** Holding-use audit vs opinion text, when requested. */
+  holding?: HoldingReport;
 }
 
 export interface VerificationReport {
@@ -112,6 +115,7 @@ function toRecord(r: LookupResult): ReportRecord {
     pin: r.support.pin,
     links: r.links ?? [],
     propositions: r.propositions ?? [],
+    holding: r.holding,
   };
 }
 
@@ -126,6 +130,7 @@ function caveatsFor(records: ReportRecord[], controlRun?: ControlRun): string[] 
   const out: string[] = [
     "We check what the opinion says, not whether it supports the argument. A case can be real, correctly quoted, and still not carry the weight the filing places on it.",
     "Primary open links come from CourtListener or CAP (or retrieved opinion text). Constructed Justia, Library of Congress, and Google Scholar links are references only — they do not affect existence verdicts.",
+    "Holding-use scores (when present) are a separate heuristic over filing propositions vs opinion text. They never change existence consensus.",
   ];
 
   const count = (fn: (r: ReportRecord) => boolean) => records.filter(fn).length;
@@ -157,6 +162,23 @@ function caveatsFor(records: ReportRecord[], controlRun?: ControlRun): string[] 
   if (noQuote === records.length && records.length) {
     out.push(
       "No quoted language was supplied, so nothing in this report speaks to what these authorities say.",
+    );
+  }
+
+  const holdingHard = count(
+    (r) =>
+      r.holding?.overall === "unsupported" || r.holding?.overall === "overstated",
+  );
+  if (holdingHard) {
+    out.push(
+      `Holding-use audit flagged ${holdingHard} authorit${holdingHard === 1 ? "y" : "ies"} as overstated or unsupported by the retrieved opinion text — review before filing.`,
+    );
+  }
+
+  const holdingUnchecked = count((r) => r.holding?.overall === "unchecked");
+  if (holdingUnchecked) {
+    out.push(
+      `Holding use could not be scored for ${holdingUnchecked} citation${holdingUnchecked === 1 ? "" : "s"} — opinion text was unavailable or propositions were too thin.`,
     );
   }
 

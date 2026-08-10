@@ -1,3 +1,4 @@
+import { MAX_PDF_BYTES, MAX_PDF_LABEL } from "./limits";
 import { MAX_OCR_PAGES, ocrPngPages } from "./ocr";
 
 export interface PdfPageText {
@@ -24,9 +25,6 @@ export interface PdfExtraction {
   };
 }
 
-// Vercel Functions reject request bodies over 4.5 MB. Stay under that with
-// headroom for multipart form overhead.
-const MAX_BYTES = 4 * 1024 * 1024;
 const MIN_TEXT_CHARS = 40;
 
 export interface ExtractPdfOptions {
@@ -121,10 +119,8 @@ export async function extractPdfText(
   if (data.byteLength === 0) {
     throw new Error("PDF file is empty.");
   }
-  if (data.byteLength > MAX_BYTES) {
-    throw new Error(
-      "PDF exceeds the 4 MB upload limit (Vercel request body cap is 4.5 MB).",
-    );
+  if (data.byteLength > MAX_PDF_BYTES) {
+    throw new Error(`PDF exceeds the ${MAX_PDF_LABEL} upload limit.`);
   }
 
   const allowOcr = options.allowOcr !== false;

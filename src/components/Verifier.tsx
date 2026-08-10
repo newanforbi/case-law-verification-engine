@@ -10,6 +10,7 @@ import type {
   Support,
   VerifyResponse,
 } from "@/lib/verify";
+import { intakePdf } from "@/lib/pdf/client-upload";
 import { reportToWordHtml, reportWordFileName } from "@/lib/report/export-word";
 import { buildReport, reportFileName } from "@/lib/report/report";
 import {
@@ -172,7 +173,7 @@ async function readJson<T>(res: Response, fallback: string): Promise<T> {
 
 function explainNonJson(status: number, fallback: string): string {
   if (status === 413)
-    return `That PDF is over the ${MAX_PDF_LABEL} upload limit, so the server rejected it before it could be read.`;
+    return `That PDF was rejected as too large for a direct upload. Files up to ${MAX_PDF_LABEL} are accepted via Blob storage.`;
   if (status === 504 || status === 408)
     return "The server took too long and gave up. Try a shorter document, or one with fewer authorities.";
   if (status === 502 || status === 503)
@@ -327,12 +328,26 @@ export function Verifier() {
     setError(null);
     setProgress(null);
     try {
-      // Extract first, and only extract: this request stays short whatever the
-      // document's length.
-      const body = new FormData();
-      body.append("file", pdf);
-      body.append("verify", "false");
-      const res = await fetch("/api/verify-pdf", { method: "POST", body });
+      // Small PDFs stay on multipart (works without Blob). Larger ones upload
+      // straight to Vercel Blob so they never hit the serverless body wall.
+      const intake = await intakePdf(pdf);
+      let res: Response;
+      if (intake.mode === "blob") {
+        res = await fetch("/api/verify-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            blobUrl: intake.blobUrl,
+            fileName: intake.fileName,
+            verify: false,
+          }),
+        });
+      } else {
+        const body = new FormData();
+        body.append("file", intake.file);
+        body.append("verify", "false");
+        res = await fetch("/api/verify-pdf", { method: "POST", body });
+      }
       const base = await readJson<PdfVerifyResponse>(res, "PDF verification failed");
       if (!res.ok) throw new Error(base.error || "PDF verification failed");
 
@@ -423,7 +438,7 @@ export function Verifier() {
               Drop a pleading or brief
             </p>
             <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-parchment-dim">
-              We extract the text layer, pair case names to reporter/Westlaw pins,
+              We extract the text layer (or OCR a scan), pair case names to reporter/Westlaw pins,
               then verify each authority against CourtListener and CAP.
             </p>
             <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
@@ -449,7 +464,9 @@ export function Verifier() {
                   </span>
                 </p>
               ) : (
-                <p className="text-sm text-parchment-dim">PDF up to 4 MB · text layer required</p>
+                <p className="text-sm text-parchment-dim">
+                  PDF up to {MAX_PDF_LABEL} · scans OCR&apos;d automatically
+                </p>
               )}
             </div>
           </div>

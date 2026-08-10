@@ -12,7 +12,7 @@
     "lint": "eslint",
     "fixture:pdf": "node scripts/make-sample-pleading.mjs",
     "fixture:scanned": "node scripts/make-scanned-pleading.mjs",
-    "test:unit": "tsx scripts/unit-check.ts && tsx scripts/citation-extract-check.ts && tsx scripts/consensus-check.ts && tsx scripts/quote-check.ts && tsx scripts/report-check.ts && tsx scripts/regression-check.ts",
+    "test:unit": "tsx scripts/unit-check.ts && tsx scripts/citation-extract-check.ts && tsx scripts/consensus-check.ts && tsx scripts/quote-check.ts && tsx scripts/report-check.ts && tsx scripts/regression-check.ts && tsx scripts/blob-limits-check.ts",
     "test:ocr": "npm run fixture:scanned && tsx scripts/ocr-check.ts",
     "test:controls": "tsx scripts/controls-check.ts",
     "test:pdf": "npm run fixture:pdf && tsx scripts/pdf-verify-check.ts",
@@ -22,6 +22,7 @@
   "dependencies": {
     "@napi-rs/canvas": "^0.1.80",
     "@vercel/analytics": "^2.0.1",
+    "@vercel/blob": "^2.7.0",
     "@vercel/speed-insights": "^2.0.0",
     "next": "15.5.23",
     "pdf-parse": "^2.4.5",

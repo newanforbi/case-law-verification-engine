@@ -89,6 +89,10 @@ live control-pair results, and can be downloaded as JSON or Word-compatible `.do
 Scanned / image-only PDFs are OCR'd automatically (pdf-parse screenshots → tesseract.js),
 up to 12 pages per upload. Text-layer PDFs skip OCR.
 
+PDF size: up to **40 MB**. Files ≤ 4 MB post as multipart; larger files upload to
+**Vercel Blob** (`/api/pdf/upload`) then `/api/verify-pdf` fetches by `blobUrl`.
+Requires a Blob store connected to the project (`BLOB_READ_WRITE_TOKEN`).
+
 ## Deploy (Vercel)
 
 Import the GitHub repo in Vercel (Framework Preset: Next.js). `vercel.json` sets:
@@ -102,7 +106,8 @@ Notes for a clean deploy:
 
 - **Node 20+** (`engines` in `package.json`)
 - **Fluid compute** should stay enabled (Hobby max duration is 300s with Fluid)
-- **PDF uploads capped at 4 MB** — Vercel Functions reject bodies over 4.5 MB
+- **PDF uploads capped at 40 MB** — files over ~4 MB use Vercel Blob (create a
+  Blob store in the project; token is injected as `BLOB_READ_WRITE_TOKEN`)
 - **OCR** needs the higher memory on `/api/verify-pdf` and network egress to fetch
   tesseract language data on cold start (cached under `/tmp` afterward)
 - No secrets required; CourtListener search + CAP `static.case.law` are unauthenticated

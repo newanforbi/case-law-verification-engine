@@ -97,10 +97,12 @@ Requires a Blob store connected to the project (`BLOB_READ_WRITE_TOKEN`).
 
 Import the GitHub repo in Vercel (Framework Preset: Next.js). `vercel.json` sets:
 
-| Route | maxDuration | memory |
-|---|---|---|
-| `/api/verify` | 120s | 1024 MB |
-| `/api/verify-pdf` | 300s | 3008 MB |
+| Route | maxDuration |
+|---|---|
+| `/api/verify` | 120s |
+| `/api/verify-pdf` | 300s |
+
+Function memory is plan-managed on Hobby (do not set `memory` in `vercel.json`).
 
 Notes for a clean deploy:
 

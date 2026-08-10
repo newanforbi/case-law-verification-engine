@@ -5,6 +5,11 @@ A web engine that audits case-law citations in a filing against the two sources 
 1. **CourtListener** — `GET /api/rest/v4/search/`
 2. **Caselaw Access Project** — `static.case.law/{reporter}/{volume}/CasesMetadata.json`
 
+Optional **statute probes** (side channel, not case-law votes):
+
+3. **LII / Cornell** — U.S. Code section pages (`law.cornell.edu/uscode`)
+4. **California LegInfo** — `codes_displaySection.xhtml` for mapped CA codes (VEH, PEN, CIV, …)
+
 Upload a pleading (**Word .docx** or PDF) or paste cites. Citeproof extracts authorities, probes existence with **coverage-aware** verdicts, checks quoted language and pin pages against opinion text where available, and exports a **timestamped verification report**.
 
 We check what the opinion says, not whether it supports your argument.
@@ -12,6 +17,8 @@ We check what the opinion says, not whether it supports your argument.
 Each result includes **open links**: primary URLs from CourtListener/CAP (or retrieved opinion text), plus constructed Justia / Library of Congress / Google Scholar references. Constructed links never affect the verdict.
 
 Filing uploads also harvest **propositions** — the prose claims tied to each authority (with a role cue: supports / distinguishes / anticipates contrary). With **holding-use audit** enabled (default on filing verify), those claims are scored against retrieved opinion text (`supported` / `aggressive` / `overstated` / `unsupported` / `unchecked`). The heuristic uses content-word overlap and overbreadth cues; set `HOLDING_AUDITOR=llm` later behind the same interface. Holding scores never change existence consensus.
+
+Statutes are queued separately from case-law (`statuteQueue`). With **statute probes** enabled (default on filing verify), U.S.C. cites hit LII and mapped California code cites hit LegInfo. Those outcomes never change CourtListener/CAP consensus.
 
 ## Existence verdicts
 
@@ -82,6 +89,11 @@ curl -s -X POST http://localhost:3000/api/verify \
   -H 'content-type: application/json' \
   -d '{"holdingAudit":true,"items":[{"citation":"Richardson v. McKnight, 521 U.S. 399, 402 (1997)","passages":["private prison guards"],"propositions":[{"text":"Private prison guards do not enjoy the same immunity as public officers.","role":"supports"}]}]}'
 
+# statute probes only (LII / LegInfo)
+curl -s -X POST http://localhost:3000/api/verify \
+  -H 'content-type: application/json' \
+  -d '{"statuteProbe":true,"statutes":[{"citation":"42 U.S.C. § 1983","kind":"statute_federal"},{"citation":"Vehicle Code § 40300.5","kind":"statute_state"}]}'
+
 # PDF extract only (what the UI does first)
 npm run fixture:pdf
 curl -s -X POST http://localhost:3000/api/verify-pdf \
@@ -89,9 +101,10 @@ curl -s -X POST http://localhost:3000/api/verify-pdf \
 ```
 
 ```bash
-npm run test:unit          # parser + consensus + quotes + links + holding + report + regression + docx
+npm run test:unit          # parser + consensus + quotes + links + holding + statute + report + regression + docx
 npm run test:links         # reference-link construction (offline)
 npm run test:holding       # holding-use heuristic fixtures (offline)
+npm run test:statute       # statute parse / LII-LegInfo classifiers (offline)
 npm run test:ocr           # image-only PDF → tesseract OCR → citation extract
 npm run test:docx          # sample pleading .docx → extract → citation queue
 npm run test:controls      # live Richardson(+) / Leman(−)

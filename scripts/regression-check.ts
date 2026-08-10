@@ -28,6 +28,7 @@ async function main() {
     mustHarvestPropositions?: Record<string, string[]>;
     mustPropositionRoles?: Record<string, string>;
     mustNotQueue: string[];
+    mustStatuteQueue?: string[];
     minAuthorities: number;
     minLocalRules: number;
   };
@@ -56,6 +57,16 @@ async function main() {
   );
   for (const banned of expected.mustNotQueue) {
     assert.ok(!extracted.verifyQueue.some((c) => c.includes(banned)), `queue should omit ${banned}`);
+  }
+  for (const needle of expected.mustStatuteQueue ?? []) {
+    assert.ok(
+      extracted.statuteQueue.some((c) => c.includes(needle)),
+      `statuteQueue should include ${needle}`,
+    );
+    assert.ok(
+      !extracted.verifyQueue.some((c) => c.includes(needle)),
+      `case verifyQueue must not include statute needle ${needle}`,
+    );
   }
 
   for (const [needle, passages] of Object.entries(expected.mustHarvestPassages)) {

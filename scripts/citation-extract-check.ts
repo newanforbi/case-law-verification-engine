@@ -13,6 +13,7 @@ Wrong pin In re Hudson, 1 Cal.App.4th 1 (2006).
 Correct pin In re Hudson, 143 Cal.App.4th 1 (2006).
 Westlaw: Burrell v. Jackson, 2003 WL 23545858.
 Also cite 42 U.S.C. § 1983 in the same brief.
+Peace officers may arrest under Vehicle Code § 40300.5.
 Local practice: L.R. 7-1 and Civil L.R. 3-4.
 But see Armondo v. Department of Motor Vehicles, 15 Cal.App.4th 1174 (1993),
 which cuts against a disappearing-arrest theory under the Vehicle Code.
@@ -36,9 +37,15 @@ assert.ok(
   out.verifyQueue.some((c) => /2003 WL 23545858/i.test(c)),
   "Westlaw authority missing",
 );
-// Statutes catalogued but not in verify queue
+// Statutes catalogued on a side queue — never in the case-law verify queue
 assert.ok((out.countsByKind.statute_federal || 0) >= 1);
+assert.ok((out.countsByKind.statute_state || 0) >= 1);
 assert.ok(!out.verifyQueue.some((c) => c.includes("1983")));
+assert.ok(out.statuteQueue.some((c) => c.includes("1983")));
+assert.ok(out.statuteQueue.some((c) => /40300\.5/.test(c)));
+assert.ok(
+  out.statuteItems.some((i) => i.kind === "statute_federal" && /1983/.test(i.citation)),
+);
 
 const richardson = out.verifyItems.find((i) => i.citation.includes("Richardson"));
 assert.ok(richardson, "verifyItems should include Richardson");
@@ -78,6 +85,7 @@ console.log(
     {
       countsByKind: out.countsByKind,
       verifyQueue: out.verifyQueue,
+      statuteQueue: out.statuteQueue,
       verifyItems: out.verifyItems.map((i) => ({
         citation: i.citation,
         passages: i.passages,

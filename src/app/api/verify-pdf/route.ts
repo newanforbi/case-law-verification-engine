@@ -169,7 +169,14 @@ export async function POST(request: Request) {
     const controlRun = controlPromise ? await controlPromise : undefined;
     const counts = tallyConsensus(results);
     const interesting = cites.citations.filter((c) =>
-      ["authority", "case_reporter", "case_westlaw", "case_name"].includes(c.kind),
+      [
+        "authority",
+        "case_reporter",
+        "case_westlaw",
+        "case_name",
+        "statute_federal",
+        "statute_state",
+      ].includes(c.kind),
     );
 
     return NextResponse.json({
@@ -182,7 +189,7 @@ export async function POST(request: Request) {
           "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
         ],
         reference:
-          "Filing extract (PDF or Word .docx) + citation pairing, then coverage-aware existence probe and quote checking via CourtListener + CAP static.case.law. We check what the opinion says, not whether it supports the argument. Constructed public links (Justia / LOC / Scholar) are references only and never affect the verdict.",
+          "Filing extract (PDF or Word .docx) + citation pairing, then coverage-aware existence probe and quote checking via CourtListener + CAP static.case.law. Optional statute probes hit LII / California LegInfo and never vote on case-law consensus. We check what the opinion says, not whether it supports the argument. Constructed public links (Justia / LOC / Scholar) are references only and never affect the verdict.",
         controls: {
           positive: CONTROLS.positive,
           negative: CONTROLS.negative,
@@ -214,6 +221,9 @@ export async function POST(request: Request) {
         verifyQueue: cites.verifyQueue,
         verifyItems,
         verifyQueueCount: cites.verifyQueue.length,
+        statuteQueue: cites.statuteQueue,
+        statuteItems: cites.statuteItems,
+        statuteQueueCount: cites.statuteQueue.length,
         occurrences: interesting.slice(0, 200).map((c) => ({
           kind: c.kind,
           citation: c.citation,

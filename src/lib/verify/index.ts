@@ -41,6 +41,10 @@ export type {
   ReferenceLink,
   SourceHit,
   SourceOutcome,
+  StatuteKind,
+  StatuteLookupResult,
+  StatuteParsed,
+  StatuteSourceHit,
   Support,
   SupportReport,
   VerifyResponse,
@@ -52,6 +56,17 @@ export {
   parseDecisionYear,
 } from "./links";
 export { evaluateHoldingUse } from "./holding";
+export {
+  classifyLeginfoResponse,
+  classifyLiiResponse,
+  leginfoUrl,
+  liiUrl,
+  lookupStatute,
+  parseStatuteCitation,
+  uscSectionPath,
+  verifyStatuteItems,
+  type StatuteRequestItem,
+} from "./statutes";
 
 export const CONTROLS = {
   positive: "Richardson v. McKnight, 521 U.S. 399 (1997)",
@@ -221,9 +236,11 @@ function methodologyBlock(): VerifyResponse["methodology"] {
     sources: [
       "CourtListener /api/rest/v4/search/",
       "Caselaw Access Project static.case.law (CasesMetadata.json + HTML)",
+      "Legal Information Institute (law.cornell.edu) U.S. Code — statute probe only",
+      "California LegInfo codes_displaySection — statute probe only",
     ],
     reference:
-      "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument. Optional holding-use audit scores harvested filing propositions against opinion text (heuristic overlap; HOLDING_AUDITOR=heuristic|llm) and never changes existence verdicts. Open links marked primary come from voting sources (or retrieved opinion text); constructed Justia / LOC / Scholar links are references only.",
+      "Coverage-aware existence probe plus quote checking: CourtListener search + CAP static.case.law. A citation counts as absent only where a source that carries its corpus was able to look and did not find it. Where the filing quotes an opinion, we check what the opinion says — not whether it supports the argument. Optional holding-use audit scores harvested filing propositions against opinion text (heuristic overlap; HOLDING_AUDITOR=heuristic|llm) and never changes existence verdicts. Optional statute probes check free LII (U.S.C.) and California LegInfo pages; they never vote on case-law consensus. Open links marked primary come from voting sources (or retrieved opinion text); constructed Justia / LOC / Scholar links are references only.",
     controls: {
       positive: CONTROLS.positive,
       negative: CONTROLS.negative,

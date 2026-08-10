@@ -8,6 +8,8 @@ import type {
   LookupResult,
   QuoteMatch,
   SourceOutcome,
+  StatuteKind,
+  StatuteLookupResult,
   Support,
   VerifyResponse,
 } from "@/lib/verify";
@@ -46,6 +48,12 @@ interface VerifyItemPayload {
   }>;
 }
 
+interface StatuteItemPayload {
+  citation: string;
+  kind: StatuteKind;
+  page?: number;
+}
+
 interface PdfVerifyResponse extends VerifyResponse {
   document?: {
     fileName: string;
@@ -62,6 +70,9 @@ interface PdfVerifyResponse extends VerifyResponse {
     verifyQueue: string[];
     verifyItems?: VerifyItemPayload[];
     verifyQueueCount: number;
+    statuteQueue?: string[];
+    statuteItems?: StatuteItemPayload[];
+    statuteQueueCount?: number;
     occurrences: PdfOccurrence[];
   };
   verified?: boolean;
@@ -213,6 +224,7 @@ export function Verifier() {
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [holdingAudit, setHoldingAudit] = useState(true);
+  const [statuteProbe, setStatuteProbe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PdfVerifyResponse | null>(null);
@@ -266,11 +278,16 @@ export function Verifier() {
     base: Partial<PdfVerifyResponse> = {},
   ) {
     const collected: LookupResult[] = [];
+    const statuteItems =
+      statuteProbe && base.extraction?.statuteItems?.length
+        ? base.extraction.statuteItems
+        : [];
+    const totalWork = items.length + statuteItems.length;
     // One control pair for the whole session — travels with the report.
     const controls = await fetchControlRun();
     for (let i = 0; i < items.length; i += VERIFY_BATCH) {
       const slice = items.slice(i, i + VERIFY_BATCH);
-      setProgress({ done: i, total: items.length });
+      setProgress({ done: i, total: totalWork || items.length });
       const batchRes = await fetch("/api/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -301,6 +318,46 @@ export function Verifier() {
           results: snapshot,
           resultCount: snapshot.length,
           counts: tallyConsensus(snapshot),
+          statuteResults: base.statuteResults ?? [],
+          statuteResultCount: base.statuteResultCount ?? 0,
+          statuteCounts: base.statuteCounts,
+        }),
+      );
+    }
+
+    const statuteCollected: StatuteLookupResult[] = [];
+    for (let i = 0; i < statuteItems.length; i += VERIFY_BATCH) {
+      const slice = statuteItems.slice(i, i + VERIFY_BATCH);
+      setProgress({ done: items.length + i, total: totalWork });
+      const batchRes = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statutes: slice, statuteProbe: true }),
+      });
+      const batch = await readJson<VerifyResponse>(batchRes, "Statute probe failed");
+      if (!batchRes.ok) {
+        throw new Error(
+          (batch as { error?: string }).error ||
+            `Statute probe failed after ${statuteCollected.length} of ${statuteItems.length}.`,
+        );
+      }
+      statuteCollected.push(...(batch.statuteResults ?? []));
+      const caseSnapshot = [...collected];
+      const statuteSnapshot = [...statuteCollected];
+      startTransition(() =>
+        setData({
+          generatedAt: batch.generatedAt,
+          methodVersion: controls.methodVersion ?? batch.methodVersion ?? METHOD_VERSION,
+          methodology: controls.methodology ?? batch.methodology ?? emptyMethodology(),
+          controlRun: controls.controlRun,
+          ...base,
+          verified: true,
+          results: caseSnapshot,
+          resultCount: caseSnapshot.length,
+          counts: tallyConsensus(caseSnapshot),
+          statuteResults: statuteSnapshot,
+          statuteResultCount: statuteSnapshot.length,
+          statuteCounts: tallyConsensus(statuteSnapshot),
         }),
       );
     }
@@ -384,13 +441,16 @@ export function Verifier() {
       const items =
         base.extraction?.verifyItems ??
         (base.extraction?.verifyQueue ?? []).map((citation) => ({ citation }));
-      startTransition(() => setData({ ...base, verified: items.length === 0 }));
+      const statutes = base.extraction?.statuteItems ?? [];
+      const nothingToProbe = items.length === 0 && !(statuteProbe && statutes.length);
+      startTransition(() => setData({ ...base, verified: nothingToProbe }));
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      if (!items.length) return;
+      if (nothingToProbe) return;
 
       // Then verify in batches, showing each one as it lands rather than
       // holding everything back until the last authority resolves. Passages
       // harvested from the filing travel with each item so quote checks run.
+      // Statutes probe afterward against LII / LegInfo (never CL/CAP votes).
       await verifyInBatches(items, base);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Filing verification failed");
@@ -513,6 +573,18 @@ export function Verifier() {
                 (does not change existence verdicts)
               </span>
             </label>
+            <label className="flex cursor-pointer items-start gap-2 text-xs text-parchment-dim md:text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-[var(--brass)]"
+                checked={statuteProbe}
+                onChange={(e) => setStatuteProbe(e.target.checked)}
+              />
+              <span>
+                Statute probes — check U.S.C. on LII and California codes on LegInfo
+                (does not change case-law verdicts)
+              </span>
+            </label>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-parchment-dim md:text-sm">
                 Extract → identify cites → verify (max 40 authorities)
@@ -604,6 +676,11 @@ export function Verifier() {
                 {data.extraction.verifyItems?.some((i) => (i.propositions?.length ?? 0) > 0)
                   ? ` · ${data.extraction.verifyItems.reduce((n, i) => n + (i.propositions?.length ?? 0), 0)} propositions`
                   : ""}
+                {(data.extraction.statuteQueueCount ??
+                  data.extraction.statuteQueue?.length ??
+                  0) > 0
+                  ? ` · ${data.extraction.statuteQueueCount ?? data.extraction.statuteQueue!.length} statutes queued`
+                  : ""}
                 {data.document.textSource === "ocr"
                   ? ` · text via OCR${
                       data.document.ocr
@@ -630,7 +707,14 @@ export function Verifier() {
                   </summary>
                   <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
                     {data.extraction.occurrences
-                      .filter((o) => o.kind === "authority" || o.kind === "case_reporter" || o.kind === "case_westlaw")
+                      .filter(
+                        (o) =>
+                          o.kind === "authority" ||
+                          o.kind === "case_reporter" ||
+                          o.kind === "case_westlaw" ||
+                          o.kind === "statute_federal" ||
+                          o.kind === "statute_state",
+                      )
                       .slice(0, 60)
                       .map((o, i) => (
                         <li key={`${o.citation}-${o.page}-${i}`} className="text-sm">
@@ -681,7 +765,41 @@ export function Verifier() {
             </ul>
           )}
 
-          {data.results.length > 0 && <ReportBar data={data} />}
+          {(data.statuteResults?.length ?? 0) > 0 ? (
+            <div className="mt-10">
+              <h2 className="font-[family-name:var(--font-fraunces)] text-2xl text-parchment md:text-3xl">
+                Statutes
+              </h2>
+              <p className="mt-1 text-sm text-parchment-dim">
+                {[
+                  `${data.statuteResultCount ?? data.statuteResults!.length} probed`,
+                  ...CONSENSUS_KINDS.filter(
+                    (k) => (data.statuteCounts?.[k] ?? 0) > 0,
+                  ).map(
+                    (k) =>
+                      `${data.statuteCounts![k]} ${STATUS_LABEL[k].toLowerCase()}`,
+                  ),
+                ].join(" · ")}
+                {" · "}
+                LII / LegInfo only — not case-law votes
+              </p>
+              <ul className="mt-4 space-y-4">
+                {data.statuteResults!.map((r, i) => (
+                  <li
+                    key={`statute-${r.query}-${i}`}
+                    className="result-enter border border-[var(--line)] bg-ink-lift/70 px-4 py-4 md:px-5"
+                    style={{ animationDelay: `${i * 70}ms` }}
+                  >
+                    <StatuteRow result={r} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {(data.results.length > 0 || (data.statuteResults?.length ?? 0) > 0) && (
+            <ReportBar data={data} />
+          )}
         </section>
       )}
     </div>
@@ -724,6 +842,9 @@ function ReportBar({
         <span className="text-brass">{report.methodVersion}</span> · generated{" "}
         {new Date(report.generatedAt).toLocaleString()} · {report.summary.citations}{" "}
         authorit{report.summary.citations === 1 ? "y" : "ies"}
+        {report.summary.statutes
+          ? ` · ${report.summary.statutes} statute${report.summary.statutes === 1 ? "" : "s"}`
+          : ""}
         {report.controlRun
           ? ` · controls ${report.controlRun.ok ? "pass" : "fail"}`
           : ""}
@@ -865,6 +986,95 @@ function ActionButton({
         label
       )}
     </button>
+  );
+}
+
+function StatuteRow({ result }: { result: StatuteLookupResult }) {
+  return (
+    <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="font-[family-name:var(--font-fraunces)] text-lg leading-snug text-parchment md:text-xl">
+            {result.query}
+          </p>
+          <p className="mt-1 text-sm text-parchment-dim">
+            {result.kind === "statute_federal" ? "U.S. Code" : "California code"}
+            {result.parsed ? (
+              <>
+                {" "}
+                · <span className="text-brass">{result.parsed.label}</span>
+              </>
+            ) : null}
+          </p>
+        </div>
+        <span
+          className={`status-${result.consensus} rounded-sm border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.08em]`}
+        >
+          {STATUS_LABEL[result.consensus]}
+        </span>
+      </div>
+      <p className="mt-3 text-sm text-parchment-dim">{STATUS_HINT[result.consensus]}</p>
+      {result.matchedLabel ? (
+        <p className="mt-2 text-sm">
+          Matched: <span className="text-parchment">{result.matchedLabel}</span>
+        </p>
+      ) : null}
+      {result.links && result.links.length > 0 ? (
+        <div className="mt-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">Open</p>
+          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            {result.links.map((link) => (
+              <li key={link.url}>
+                <a
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-brass-soft underline-offset-2 hover:underline"
+                >
+                  {link.label}
+                  {link.kind === "reference" ? (
+                    <span className="text-parchment-dim"> (ref)</span>
+                  ) : null}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {result.sources.map((s) => (
+          <div key={s.source} className="border border-[var(--line)] bg-ink/40 px-3 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brass">
+                {s.source === "lii" ? "LII (Cornell)" : "California LegInfo"}
+              </p>
+              <span className={`text-xs font-medium ${OUTCOME_TONE[s.outcome]}`}>
+                {OUTCOME_LABEL[s.outcome]}
+              </span>
+            </div>
+            {s.coverage ? (
+              <p className="mt-2 text-xs leading-relaxed text-parchment">{s.coverage}</p>
+            ) : null}
+            {s.notes ? (
+              <p className="mt-1 text-xs leading-relaxed text-parchment-dim">{s.notes}</p>
+            ) : null}
+            {s.url ? (
+              <a
+                href={s.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-block text-xs text-brass-soft underline-offset-2 hover:underline"
+              >
+                Open code page
+              </a>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      {result.error ? (
+        <p className="mt-3 text-xs text-not-found">{result.error}</p>
+      ) : null}
+    </div>
   );
 }
 

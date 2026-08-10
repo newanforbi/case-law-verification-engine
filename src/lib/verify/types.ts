@@ -6,10 +6,10 @@ export type { CoverageEnvelope, CoverageReason, Jurisdiction } from "./coverage"
 
 /**
  * Method identity stamped into every verify response and exportable report.
- * Bump when consensus rules, quote matching, coverage, holding fit, or report
- * schema change.
+ * Bump when consensus rules, quote matching, coverage, holding fit, statute
+ * probes, or report schema change.
  */
-export const METHOD_VERSION = "2026.09.1";
+export const METHOD_VERSION = "2026.10.1";
 
 /**
  * Openable URL attached to a lookup. Primary = from a voting source or the
@@ -211,6 +211,46 @@ export interface ControlRun {
   ok: boolean;
 }
 
+/** Statute kinds probed against free code hosts (not CL/CAP). */
+export type StatuteKind = "statute_federal" | "statute_state";
+
+export interface StatuteParsed {
+  kind: StatuteKind;
+  /** U.S.C. title, when federal. */
+  title?: string;
+  /** LegInfo lawCode (VEH, PEN, …), when a mapped California code. */
+  lawCode?: string;
+  section: string;
+  label: string;
+}
+
+export interface StatuteSourceHit {
+  source: "lii" | "leginfo";
+  outcome: SourceOutcome;
+  found: boolean;
+  coverage: string;
+  url?: string;
+  checkedAt?: string;
+  httpStatus?: number | null;
+  notes?: string;
+}
+
+/**
+ * Existence-style probe for a statute cite against LII or LegInfo.
+ * Kept separate from LookupResult so case-law tallies stay pure.
+ */
+export interface StatuteLookupResult {
+  query: string;
+  kind: StatuteKind;
+  parsed: StatuteParsed | null;
+  sources: StatuteSourceHit[];
+  consensus: Consensus;
+  matchedLabel: string;
+  links?: ReferenceLink[];
+  checkedAt?: string;
+  error?: string;
+}
+
 export interface VerifyResponse {
   generatedAt: string;
   methodVersion: string;
@@ -229,4 +269,8 @@ export interface VerifyResponse {
   resultCount: number;
   counts: Record<Consensus, number>;
   results: LookupResult[];
+  /** Optional statute-probe side channel (never merged into case tallies). */
+  statuteResultCount?: number;
+  statuteCounts?: Record<Consensus, number>;
+  statuteResults?: StatuteLookupResult[];
 }

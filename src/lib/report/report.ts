@@ -19,6 +19,7 @@ import type {
   QuoteFinding,
   Proposition,
   ReferenceLink,
+  StatuteLookupResult,
   Support,
   VerifyResponse,
 } from "@/lib/verify";
@@ -55,6 +56,23 @@ export interface ReportRecord {
   holding?: HoldingReport;
 }
 
+export interface StatuteReportRecord {
+  citation: string;
+  kind: StatuteLookupResult["kind"];
+  label: string;
+  existence: Consensus;
+  matchedLabel: string;
+  checkedAt?: string;
+  sources: Array<{
+    source: string;
+    outcome: string;
+    coverage: string;
+    url?: string;
+    checkedAt?: string;
+  }>;
+  links: ReferenceLink[];
+}
+
 export interface VerificationReport {
   id: string;
   generatedAt: string;
@@ -68,8 +86,11 @@ export interface VerificationReport {
     citations: number;
     existence: Record<Consensus, number>;
     support: Record<Support, number>;
+    statutes: number;
+    statuteExistence: Record<Consensus, number>;
   };
   records: ReportRecord[];
+  statuteRecords: StatuteReportRecord[];
   /** The limits, carried by the artifact rather than left to the reader. */
   caveats: string[];
 }
@@ -131,6 +152,7 @@ function caveatsFor(records: ReportRecord[], controlRun?: ControlRun): string[] 
     "We check what the opinion says, not whether it supports the argument. A case can be real, correctly quoted, and still not carry the weight the filing places on it.",
     "Primary open links come from CourtListener or CAP (or retrieved opinion text). Constructed Justia, Library of Congress, and Google Scholar links are references only — they do not affect existence verdicts.",
     "Holding-use scores (when present) are a separate heuristic over filing propositions vs opinion text. They never change existence consensus.",
+    "Statute probes (when present) check free LII / California LegInfo pages only. They never vote on case-law consensus.",
   ];
 
   const count = (fn: (r: ReportRecord) => boolean) => records.filter(fn).length;
@@ -210,6 +232,25 @@ function defaultMethodology(
   };
 }
 
+function toStatuteRecord(r: StatuteLookupResult): StatuteReportRecord {
+  return {
+    citation: r.query,
+    kind: r.kind,
+    label: r.parsed?.label ?? r.query,
+    existence: r.consensus,
+    matchedLabel: r.matchedLabel,
+    checkedAt: r.checkedAt,
+    sources: r.sources.map((s) => ({
+      source: s.source,
+      outcome: s.outcome,
+      coverage: s.coverage,
+      url: s.url,
+      checkedAt: s.checkedAt,
+    })),
+    links: r.links ?? [],
+  };
+}
+
 export function buildReport(
   data: VerifyResponse,
   extra: {
@@ -219,6 +260,7 @@ export function buildReport(
   } = {},
 ): VerificationReport {
   const records = data.results.map(toRecord);
+  const statuteRecords = (data.statuteResults ?? []).map(toStatuteRecord);
   const controlRun = extra.controlRun ?? data.controlRun;
   const methodology = defaultMethodology(data);
 
@@ -228,13 +270,31 @@ export function buildReport(
     existence[r.existence] += 1;
     support[r.support] += 1;
   }
+  const statuteExistence =
+    data.statuteCounts ??
+    (() => {
+      const t = emptyTally(CONSENSUS_KINDS);
+      for (const r of statuteRecords) t[r.existence] += 1;
+      return t;
+    })();
 
   const body = {
     generatedAt: data.generatedAt,
     methodVersion: data.methodVersion ?? methodology.version,
     records: records.map((r) => [r.citation, r.existence, r.support, r.checkedAt]),
+    statutes: statuteRecords.map((r) => [r.citation, r.existence, r.checkedAt]),
     controlOk: controlRun?.ok ?? null,
   };
+
+  const caveats = caveatsFor(records, controlRun);
+  if (statuteRecords.length) {
+    const absent = statuteRecords.filter((r) => r.existence === "NOT_FOUND").length;
+    if (absent) {
+      caveats.push(
+        `${absent} statute${absent === 1 ? "" : "s"} did not resolve on the free code host — confirm in an official reporter or annotated code before filing.`,
+      );
+    }
+  }
 
   return {
     id: digest(JSON.stringify(body)),
@@ -244,9 +304,16 @@ export function buildReport(
     document: extra.document,
     methodology,
     controlRun,
-    summary: { citations: records.length, existence, support },
+    summary: {
+      citations: records.length,
+      existence,
+      support,
+      statutes: statuteRecords.length,
+      statuteExistence,
+    },
     records,
-    caveats: caveatsFor(records, controlRun),
+    statuteRecords,
+    caveats,
   };
 }
 

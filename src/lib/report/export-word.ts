@@ -83,6 +83,49 @@ export function reportToWordHtml(report: VerificationReport): string {
 
   const caveats = report.caveats.map((c) => `<li>${esc(c)}</li>`).join("\n");
 
+  const statuteRows = (report.statuteRecords ?? [])
+    .map((r) => {
+      const sources = r.sources
+        .map((s) => `${s.source}: ${s.outcome}`)
+        .join("; ");
+      const links = (r.links ?? [])
+        .map((l) => `${esc(l.label)} (${l.kind}): ${esc(l.url)}`)
+        .join("<br/>");
+      return `<tr>
+  <td>${esc(r.citation)}<br/><span style="color:#555">${esc(r.kind)} · ${esc(r.label)}</span></td>
+  <td>${esc(r.existence)}</td>
+  <td>${esc(r.matchedLabel || "—")}</td>
+  <td>${esc(sources || "—")}</td>
+  <td>${links || "—"}</td>
+  <td>${esc(r.checkedAt || "—")}</td>
+</tr>`;
+    })
+    .join("\n");
+
+  const statuteBlock =
+    (report.statuteRecords ?? []).length > 0
+      ? `
+  <h2>Statutes</h2>
+  <p class="meta">${report.summary.statutes} statute${
+    report.summary.statutes === 1 ? "" : "s"
+  } probed (LII / LegInfo — not case-law votes)</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Citation</th>
+        <th>Existence</th>
+        <th>Matched label</th>
+        <th>Sources</th>
+        <th>Open links</th>
+        <th>Checked at</th>
+      </tr>
+    </thead>
+    <tbody>
+${statuteRows}
+    </tbody>
+  </table>`
+      : "";
+
   return `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office"
       xmlns:w="urn:schemas-microsoft-com:office:word"
@@ -139,6 +182,8 @@ export function reportToWordHtml(report: VerificationReport): string {
 ${rows || `<tr><td colspan="10">No authorities in this report.</td></tr>`}
     </tbody>
   </table>
+
+${statuteBlock}
 
   <h2>Sources consulted</h2>
   <p>${esc((report.methodology.sources ?? []).join("; "))}</p>

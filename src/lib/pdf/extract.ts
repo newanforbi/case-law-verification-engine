@@ -1,5 +1,3 @@
-import { PDFParse } from "pdf-parse";
-
 export interface PdfPageText {
   page: number;
   text: string;
@@ -18,6 +16,21 @@ export interface PdfExtraction {
 // headroom for multipart form overhead.
 const MAX_BYTES = 4 * 1024 * 1024;
 
+/**
+ * Load pdf-parse the way Vercel needs it.
+ *
+ * On serverless, importing PDFParse without the worker shim throws during
+ * module init (DOMMatrix / canvas / workerSrc). That surfaces as a Next.js
+ * HTML 500 before the route's try/catch can answer in JSON — exactly the
+ * "server returned a page instead of a result" the UI shows. Importing
+ * `pdf-parse/worker` first registers the canvas factory and worker source.
+ */
+async function loadPdfParse() {
+  await import("pdf-parse/worker");
+  const mod = await import("pdf-parse");
+  return mod;
+}
+
 export async function extractPdfText(
   data: Uint8Array,
   fileName: string,
@@ -28,6 +41,16 @@ export async function extractPdfText(
   if (data.byteLength > MAX_BYTES) {
     throw new Error(
       "PDF exceeds the 4 MB upload limit (Vercel request body cap is 4.5 MB).",
+    );
+  }
+
+  let PDFParse: typeof import("pdf-parse").PDFParse;
+  try {
+    ({ PDFParse } = await loadPdfParse());
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `PDF engine failed to start on this server (${reason}). Try again, or paste the citations instead.`,
     );
   }
 
@@ -50,6 +73,9 @@ export async function extractPdfText(
       hasTextLayer: charCount >= 40,
       charCount,
     };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Could not read that PDF (${reason}).`);
   } finally {
     // PDFParse may hold worker resources; destroy if available.
     const maybe = parser as unknown as { destroy?: () => Promise<void> };

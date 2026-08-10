@@ -165,6 +165,8 @@ function explainNonJson(status: number, fallback: string): string {
     return "The server took too long and gave up. Try a shorter document, or one with fewer authorities.";
   if (status === 502 || status === 503)
     return "The server was unavailable. Nothing was checked — try again in a moment.";
+  if (status === 500)
+    return `${fallback}: the PDF engine crashed before it could answer. Retry once; if it persists, paste the citations instead.`;
   return `${fallback} (HTTP ${status}). The server returned a page instead of a result.`;
 }
 
